@@ -12,4 +12,3 @@ backup/
 swap/
 
 # Lazy.nvim will download plugins separately on each machine
-# so we don't need to track them
