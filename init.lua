@@ -930,6 +930,21 @@ require("lazy").setup({
     end,
   },
 
+  -- Mini.ai for enhanced text objects
+  {
+    "echasnovski/mini.ai",
+    version = "*",
+    config = function()
+      require("mini.ai").setup({
+        -- Number of lines within which textobject is searched
+        n_lines = 500,
+
+        -- Custom textobjects (default includes: brackets, quotes, function calls, tags, etc.)
+        custom_textobjects = nil,
+      })
+    end,
+  },
+
   -- Smear cursor for smooth cursor animations
   {
     "sphamba/smear-cursor.nvim",

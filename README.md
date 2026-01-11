@@ -15,6 +15,8 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - 🎨 **Conform.nvim** for code formatting
 - 🔍 **Trouble.nvim** for diagnostics
 - 💡 **LSP Saga** for enhanced LSP features
+- 🎯 **Mini.ai** for enhanced text objects (functions, arguments, etc.)
+- 🔄 **Mini.surround** for surrounding text manipulation
 
 ## Installation
 
@@ -171,6 +173,31 @@ nvim
 | `sF` | Normal | Find surrounding (left) |
 | `sh` | Normal | Highlight surrounding |
 
+### Mini.ai (Enhanced Text Objects)
+
+Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside").
+
+**Usage:** Combine operators (`d`, `c`, `v`, `y`) with `a`/`i` and a text object.
+
+**Available text objects:**
+- `(`, `)`, `b` - Parentheses
+- `[`, `]` - Square brackets
+- `{`, `}`, `B` - Curly braces
+- `<`, `>` - Angle brackets
+- `'`, `"`, `` ` `` - Quotes
+- `?` - User prompt (ask which character to use)
+- `t` - HTML/XML tags
+- `f` - Function call
+- `a` - Function argument
+- `q` - Quote (any type)
+- `b` - Bracket (any type)
+
+**Examples:**
+- `dif` - Delete inside function
+- `cia` - Change inside argument
+- `viq` - Visually select inside any quote
+- `dab` - Delete around any bracket
+
 ### Formatting
 
 | Shortcut | Mode | Description |
@@ -228,6 +255,7 @@ nvim
 - [nvim-autopairs](https://github.com/windwp/nvim-autopairs) - Auto close brackets
 - [conform.nvim](https://github.com/stevearc/conform.nvim) - Code formatting
 - [mini.surround](https://github.com/echasnovski/mini.surround) - Surround text objects
+- [mini.ai](https://github.com/echasnovski/mini.ai) - Enhanced text objects (function, argument, etc.)
 - [flash.nvim](https://github.com/folke/flash.nvim) - Enhanced motion
 
 ### Markdown
