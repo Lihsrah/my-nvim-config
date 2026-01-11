@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Claude Code directory
+.claude/
+
+# Neovim data files
+plugin/
+spell/
+undodir/
+backup/
+swap/
+
+# Lazy.nvim will download plugins separately on each machine
+# so we don't need to track them
