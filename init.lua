@@ -493,11 +493,7 @@ require("lazy").setup({
           },
         },
         lightbulb = {
-          enable = true,
-          enable_in_insert = true,
-          sign = true,
-          sign_priority = 40,
-          virtual_text = true,
+          enable = false,
         },
         diagnostic = {
           show_code_action = true,
