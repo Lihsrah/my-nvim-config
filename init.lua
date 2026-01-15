@@ -580,6 +580,28 @@ require("lazy").setup({
     },
   },
 
+  -- Treesitter for syntax highlighting and folding
+  {
+    "nvim-treesitter/nvim-treesitter",
+    build = ":TSUpdate",
+    config = function()
+      require("nvim-treesitter.configs").setup({
+        ensure_installed = {
+          "lua", "javascript", "typescript", "html", "css",
+          "json", "c", "cpp", "java", "php", "markdown", "markdown_inline",
+        },
+        sync_install = false,
+        auto_install = true,
+        highlight = {
+          enable = true,
+        },
+        indent = {
+          enable = true,
+        },
+      })
+    end,
+  },
+
   -- Telescope fuzzy finder
   {
     "nvim-telescope/telescope.nvim",
@@ -992,6 +1014,19 @@ vim.opt.clipboard = "unnamedplus"
 
 -- Disable mouse to prevent hover selection in completion menu
 vim.opt.mouse = ""
+
+-- Folding configuration (indent-based for granular bracket folding)
+vim.opt.foldmethod = "indent"   -- Fold by indentation level (more granular)
+vim.opt.foldlevel = 99          -- Start with all folds open
+vim.opt.foldlevelstart = 99     -- Start with all folds open for new buffers
+vim.opt.foldenable = true       -- Enable folding
+vim.opt.foldnestmax = 6         -- Maximum fold nesting
+
+-- Folding keybindings
+vim.keymap.set("n", "zR", "zR", { desc = "Open all folds" })
+vim.keymap.set("n", "zM", "zM", { desc = "Close all folds" })
+vim.keymap.set("n", "zr", "zr", { desc = "Open one fold level" })
+vim.keymap.set("n", "zm", "zm", { desc = "Close one fold level" })
 
 -- Tab management keybindings
 vim.keymap.set("n", "<leader>to", ":tabnew<CR>", { desc = "Open new tab" })
