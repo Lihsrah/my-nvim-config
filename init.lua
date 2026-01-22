@@ -1101,6 +1101,19 @@ vim.keymap.set("i", "jk", "<ESC>", { desc = "Exit insert mode" })
 -- Clear search highlighting
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlighting" })
 
+-- Delete without copying to register (use black hole register)
+vim.keymap.set("n", "d", '"_d', { desc = "Delete without yanking" })
+vim.keymap.set("n", "dd", '"_dd', { desc = "Delete line without yanking" })
+vim.keymap.set("n", "D", '"_D', { desc = "Delete to end of line without yanking" })
+vim.keymap.set("v", "d", '"_d', { desc = "Delete selection without yanking" })
+vim.keymap.set("n", "x", '"_x', { desc = "Delete char without yanking" })
+
+-- Leader + d to cut (delete with yanking, like normal d behavior)
+vim.keymap.set("n", "<leader>d", "d", { desc = "Cut (delete with yank)" })
+vim.keymap.set("n", "<leader>dd", "dd", { desc = "Cut line (delete with yank)" })
+vim.keymap.set("n", "<leader>D", "D", { desc = "Cut to end of line (delete with yank)" })
+vim.keymap.set("v", "<leader>d", "d", { desc = "Cut selection (delete with yank)" })
+
 -- Move lines up and down with Alt+j/k
 vim.keymap.set("n", "<A-j>", ":m .+1<CR>==", { desc = "Move line down" })
 vim.keymap.set("n", "<A-k>", ":m .-2<CR>==", { desc = "Move line up" })

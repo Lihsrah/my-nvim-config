@@ -83,6 +83,28 @@ nvim
 | `<C-p>` | Normal | Jump forward in jumplist |
 | `<C-o>` | Normal | Jump back in jumplist |
 
+### Block Navigation
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `[{` | Normal | Jump to opening `{` of current block |
+| `]}` | Normal | Jump to closing `}` of current block |
+| `[(` | Normal | Jump to opening `(` of current block |
+| `])` | Normal | Jump to closing `)` of current block |
+| `%` | Normal | Jump to matching bracket |
+
+### Folding (Collapse/Expand Code Blocks)
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `za` | Normal | Toggle fold under cursor |
+| `zo` | Normal | Open fold under cursor |
+| `zc` | Normal | Close fold under cursor |
+| `zR` | Normal | Open all folds |
+| `zM` | Normal | Close all folds |
+| `zr` | Normal | Open one fold level everywhere |
+| `zm` | Normal | Close one fold level everywhere |
+
 ### Line Movement
 
 | Shortcut | Mode | Description |
