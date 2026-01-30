@@ -17,6 +17,7 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - 💡 **LSP Saga** for enhanced LSP features
 - 🎯 **Mini.ai** for enhanced text objects (functions, arguments, etc.)
 - 🔄 **Mini.surround** for surrounding text manipulation
+- 📂 **nvim-ufo** for VSCode-like code folding
 
 ## Installation
 
@@ -87,23 +88,85 @@ nvim
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
+| `%` | Normal | Jump to matching bracket `()`, `[]`, `{}` |
 | `[{` | Normal | Jump to opening `{` of current block |
 | `]}` | Normal | Jump to closing `}` of current block |
 | `[(` | Normal | Jump to opening `(` of current block |
 | `])` | Normal | Jump to closing `)` of current block |
-| `%` | Normal | Jump to matching bracket |
+
+### Line Navigation
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `0` | Normal | Go to beginning of line |
+| `^` | Normal | Go to first non-blank character |
+| `$` | Normal | Go to end of line |
+| `g_` | Normal | Go to last non-blank character |
+| `_` | Normal | Go to first non-blank character (same as `^`) |
+
+### Word Navigation
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `w` | Normal | Move to start of next word |
+| `W` | Normal | Move to start of next WORD (whitespace-separated) |
+| `b` | Normal | Move to start of previous word |
+| `B` | Normal | Move to start of previous WORD |
+| `e` | Normal | Move to end of next word |
+| `E` | Normal | Move to end of next WORD |
+| `ge` | Normal | Move to end of previous word |
+
+### File Navigation
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `gg` | Normal | Go to first line of file |
+| `G` | Normal | Go to last line of file |
+| `{n}G` | Normal | Go to line number n (e.g., `50G` goes to line 50) |
+| `:{n}` | Normal | Go to line number n (e.g., `:50` goes to line 50) |
+| `{` | Normal | Jump to previous empty line (paragraph up) |
+| `}` | Normal | Jump to next empty line (paragraph down) |
+| `H` | Normal | Move cursor to top of screen |
+| `M` | Normal | Move cursor to middle of screen |
+| `L` | Normal | Move cursor to bottom of screen |
 
 ### Folding (Collapse/Expand Code Blocks)
+
+This config uses **nvim-ufo** with Treesitter for VSCode-like syntax-aware folding. Each code block (`function`, `if`, `for`, `try/catch`, class, etc.) is independently foldable based on your cursor position.
+
+**How it works:**
+- Place cursor anywhere inside a block and press `zc` to close just that block
+- Folds are detected by syntax structure, not indentation
+- A fold column on the left shows available folds
+
+**Example:**
+```javascript
+function foo() {     // <- zc closes ONLY this function
+    if (condition) { // <- zc closes ONLY this if block
+        doStuff();
+    }
+    try {            // <- zc closes ONLY this try block
+        riskyCall();
+    } catch (e) {    // <- zc closes ONLY this catch block
+        handle(e);   // <- cursor here, zc closes the catch block
+    }
+}
+```
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
 | `za` | Normal | Toggle fold under cursor |
 | `zo` | Normal | Open fold under cursor |
-| `zc` | Normal | Close fold under cursor |
-| `zR` | Normal | Open all folds |
-| `zM` | Normal | Close all folds |
-| `zr` | Normal | Open one fold level everywhere |
-| `zm` | Normal | Close one fold level everywhere |
+| `zc` | Normal | Close fold under cursor (the block you're inside) |
+| `zO` | Normal | Open all folds under cursor recursively |
+| `zC` | Normal | Close all folds under cursor recursively |
+| `zR` | Normal | Open all folds in file |
+| `zM` | Normal | Close all folds in file |
+| `zr` | Normal | Open folds except certain kinds |
+| `zm` | Normal | Close folds by level |
+| `zK` | Normal | Peek folded lines without opening |
+
+**Workflow tip:** Press `zM` to collapse everything, then navigate and use `zo`/`za` to open specific blocks as needed.
 
 ### Line Movement
 
@@ -279,6 +342,7 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 - [mini.surround](https://github.com/echasnovski/mini.surround) - Surround text objects
 - [mini.ai](https://github.com/echasnovski/mini.ai) - Enhanced text objects (function, argument, etc.)
 - [flash.nvim](https://github.com/folke/flash.nvim) - Enhanced motion
+- [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo) - VSCode-like code folding
 
 ### Markdown
 - [render-markdown.nvim](https://github.com/MeanderingProgrammer/markdown.nvim) - Modern markdown rendering

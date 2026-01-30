@@ -972,6 +972,20 @@ require("lazy").setup({
 		end,
 	},
 
+	-- UFO for VSCode-like folding
+	{
+		"kevinhwang91/nvim-ufo",
+		dependencies = { "kevinhwang91/promise-async" },
+		config = function()
+			-- Use treesitter as the main provider, fallback to indent
+			require("ufo").setup({
+				provider_selector = function(bufnr, filetype, buftype)
+					return { "treesitter", "indent" }
+				end,
+			})
+		end,
+	},
+
 	-- Smear cursor for smooth cursor animations
 	{
 		"sphamba/smear-cursor.nvim",
@@ -1024,18 +1038,18 @@ vim.opt.clipboard = "unnamedplus"
 -- Disable mouse to prevent hover selection in completion menu
 vim.opt.mouse = ""
 
--- Folding configuration (indent-based for granular bracket folding)
-vim.opt.foldmethod = "indent" -- Fold by indentation level (more granular)
+-- Folding configuration (nvim-ufo for VSCode-like folding)
+vim.opt.foldcolumn = "1" -- Show fold column
 vim.opt.foldlevel = 99 -- Start with all folds open
 vim.opt.foldlevelstart = 99 -- Start with all folds open for new buffers
 vim.opt.foldenable = true -- Enable folding
-vim.opt.foldnestmax = 6 -- Maximum fold nesting
 
--- Folding keybindings
-vim.keymap.set("n", "zR", "zR", { desc = "Open all folds" })
-vim.keymap.set("n", "zM", "zM", { desc = "Close all folds" })
-vim.keymap.set("n", "zr", "zr", { desc = "Open one fold level" })
-vim.keymap.set("n", "zm", "zm", { desc = "Close one fold level" })
+-- Folding keybindings (using nvim-ufo)
+vim.keymap.set("n", "zR", function() require("ufo").openAllFolds() end, { desc = "Open all folds" })
+vim.keymap.set("n", "zM", function() require("ufo").closeAllFolds() end, { desc = "Close all folds" })
+vim.keymap.set("n", "zr", function() require("ufo").openFoldsExceptKinds() end, { desc = "Open folds except kinds" })
+vim.keymap.set("n", "zm", function() require("ufo").closeFoldsWith() end, { desc = "Close folds with level" })
+vim.keymap.set("n", "zK", function() require("ufo").peekFoldedLinesUnderCursor() end, { desc = "Peek fold" })
 
 -- Tab management keybindings
 vim.keymap.set("n", "<leader>to", ":tabnew<CR>", { desc = "Open new tab" })
