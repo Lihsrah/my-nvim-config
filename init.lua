@@ -977,10 +977,29 @@ require("lazy").setup({
 		"kevinhwang91/nvim-ufo",
 		dependencies = { "kevinhwang91/promise-async" },
 		config = function()
-			-- Use treesitter as the main provider, fallback to indent
+			-- Custom provider that excludes closing bracket line from fold range
 			require("ufo").setup({
 				provider_selector = function(bufnr, filetype, buftype)
-					return { "treesitter", "indent" }
+					return function(bufnr)
+						local function handleFallbackException(err, providerName)
+							if type(err) == "string" and err:match("UfoFallbackException") then
+								return require("ufo").getFolds(bufnr, providerName)
+							else
+								return require("promise-async").reject(err)
+							end
+						end
+
+						return require("ufo").getFolds(bufnr, "lsp"):catch(function(err)
+							return handleFallbackException(err, "indent")
+						end):thenCall(function(ranges)
+							for _, range in ipairs(ranges or {}) do
+								if range.endLine > range.startLine then
+									range.endLine = range.endLine - 1
+								end
+							end
+							return ranges
+						end)
+					end
 				end,
 			})
 		end,
@@ -1121,6 +1140,15 @@ vim.keymap.set("n", "dd", '"_dd', { desc = "Delete line without yanking" })
 vim.keymap.set("n", "D", '"_D', { desc = "Delete to end of line without yanking" })
 vim.keymap.set("v", "d", '"_d', { desc = "Delete selection without yanking" })
 vim.keymap.set("n", "x", '"_x', { desc = "Delete char without yanking" })
+
+-- Change without copying to register (use black hole register)
+vim.keymap.set("n", "c", '"_c', { desc = "Change without yanking" })
+vim.keymap.set("n", "cc", '"_cc', { desc = "Change line without yanking" })
+vim.keymap.set("n", "C", '"_C', { desc = "Change to end of line without yanking" })
+vim.keymap.set("v", "c", '"_c', { desc = "Change selection without yanking" })
+vim.keymap.set("n", "s", '"_s', { desc = "Substitute char without yanking" })
+vim.keymap.set("n", "S", '"_S', { desc = "Substitute line without yanking" })
+vim.keymap.set("v", "s", '"_s', { desc = "Substitute selection without yanking" })
 
 -- Leader + d to cut (delete with yanking, like normal d behavior)
 vim.keymap.set("n", "<leader>d", "d", { desc = "Cut (delete with yank)" })
