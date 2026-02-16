@@ -741,6 +741,24 @@ require("lazy").setup({
 		end,
 	},
 
+	-- Neogit - Git interface
+	{
+		"NeogitOrg/neogit",
+		dependencies = {
+			"nvim-lua/plenary.nvim",
+			"sindrets/diffview.nvim",
+			"nvim-telescope/telescope.nvim",
+		},
+		config = function()
+			require("neogit").setup({
+				integrations = {
+					diffview = true,
+					telescope = true,
+				},
+			})
+		end,
+	},
+
 	-- Harpoon for quick file navigation
 	{
 		"ThePrimeagen/harpoon",
@@ -786,15 +804,6 @@ require("lazy").setup({
 		end,
 	},
 
-	-- Lazygit integration
-	{
-		"kdheepak/lazygit.nvim",
-		dependencies = { "nvim-lua/plenary.nvim" },
-		cmd = "LazyGit",
-		keys = {
-			{ "<leader>lg", "<cmd>LazyGit<cr>", desc = "Open LazyGit" },
-		},
-	},
 
 	-- Conform.nvim for code formatting
 	{
@@ -1317,7 +1326,15 @@ vim.keymap.set("n", "<C-o>", "<C-o>", { desc = "Jump back in jumplist" })
 vim.keymap.set("n", "<leader>tt", ":terminal<CR>")
 vim.keymap.set("n", "<leader>tv", ":botright vsplit | terminal<CR>")
 vim.keymap.set("n", "<leader>th", ":botright split | terminal<CR>")
-vim.keymap.set("t", "jk", [[<C-\><C-n>]])
+-- jk exits terminal mode
+vim.api.nvim_create_autocmd("TermOpen", {
+	callback = function(args)
+		vim.keymap.set("t", "jk", [[<C-\><C-n>]], { buffer = args.buf })
+	end,
+})
+
+-- Neogit
+vim.keymap.set("n", "<leader>lg", "<cmd>Neogit<cr>", { desc = "Open Neogit" })
 
 -- Harpoon keybindings (with proper initialization)
 vim.keymap.set("n", "<leader>ma", function()

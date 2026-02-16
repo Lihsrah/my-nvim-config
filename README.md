@@ -4,20 +4,21 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 
 ## Features
 
-- 🎨 **Catppuccin Mocha** colorscheme with transparent background
-- 🔧 **LSP Support** for TypeScript, JavaScript, C/C++, Java, PHP, HTML, CSS
-- ✨ **Autocompletion** with nvim-cmp and LuaSnip
-- 📁 **Oil.nvim** file explorer
-- 🔭 **Telescope** fuzzy finder
-- 🎯 **Harpoon** for quick file navigation
-- 📝 **Markdown** support with preview and tables
-- 🚀 **Flash.nvim** for enhanced motion
-- 🎨 **Conform.nvim** for code formatting
-- 🔍 **Trouble.nvim** for diagnostics
-- 💡 **LSP Saga** for enhanced LSP features
-- 🎯 **Mini.ai** for enhanced text objects (functions, arguments, etc.)
-- 🔄 **Mini.surround** for surrounding text manipulation
-- 📂 **nvim-ufo** for VSCode-like code folding
+- **Catppuccin Mocha** colorscheme with transparent background
+- **LSP Support** for TypeScript, JavaScript, C/C++, Java, PHP, HTML, CSS
+- **Autocompletion** with nvim-cmp and LuaSnip
+- **Oil.nvim** file explorer
+- **Telescope** fuzzy finder
+- **Harpoon** for quick file/terminal navigation (terminal-aware)
+- **Neogit** git interface (Magit-style, with diffview)
+- **Markdown** support with preview and tables
+- **Flash.nvim** for enhanced motion
+- **Conform.nvim** for code formatting (folds preserved on save)
+- **Trouble.nvim** for diagnostics
+- **LSP Saga** for enhanced LSP features
+- **Mini.ai** for enhanced text objects (functions, arguments, etc.)
+- **Mini.surround** for surrounding text manipulation
+- **nvim-ufo** for VSCode-like code folding
 
 ## Installation
 
@@ -51,6 +52,7 @@ nvim
 | Shortcut | Mode | Description |
 |----------|------|-------------|
 | `jk` | Insert | Exit insert mode |
+| `jk` | Terminal | Exit terminal mode (not in lazygit) |
 | `<Esc>` | Normal | Clear search highlighting |
 
 ### Window Management
@@ -102,7 +104,6 @@ nvim
 | `^` | Normal | Go to first non-blank character |
 | `$` | Normal | Go to end of line |
 | `g_` | Normal | Go to last non-blank character |
-| `_` | Normal | Go to first non-blank character (same as `^`) |
 
 ### Word Navigation
 
@@ -122,62 +123,144 @@ nvim
 |----------|------|-------------|
 | `gg` | Normal | Go to first line of file |
 | `G` | Normal | Go to last line of file |
-| `{n}G` | Normal | Go to line number n (e.g., `50G` goes to line 50) |
-| `:{n}` | Normal | Go to line number n (e.g., `:50` goes to line 50) |
-| `{` | Normal | Jump to previous empty line (paragraph up) |
-| `}` | Normal | Jump to next empty line (paragraph down) |
+| `{n}G` | Normal | Go to line number n (e.g., `50G`) |
+| `:{n}` | Normal | Go to line number n (e.g., `:50`) |
+| `{` | Normal | Jump to previous empty line |
+| `}` | Normal | Jump to next empty line |
 | `H` | Normal | Move cursor to top of screen |
 | `M` | Normal | Move cursor to middle of screen |
 | `L` | Normal | Move cursor to bottom of screen |
 
 ### Folding (Collapse/Expand Code Blocks)
 
-This config uses **nvim-ufo** with Treesitter for VSCode-like syntax-aware folding. Each code block (`function`, `if`, `for`, `try/catch`, class, etc.) is independently foldable based on your cursor position.
+Uses **nvim-ufo** with Treesitter (JS/TS) and LSP (other languages) for VSCode-like folding.
+
+**Fold display:** `function foo() { ···` with closing `}` visible on the next line.
 
 **How it works:**
-- Place cursor anywhere inside a block and press `zc` to close just that block
-- Folds are detected by syntax structure, not indentation
-- A fold column on the left shows available folds
+- Press `za` anywhere inside a block — it finds and collapses the innermost enclosing `{}`
+- JS/TS object methods (e.g. `reset: function () {}`) are fully foldable
+- Folds are preserved when saving (format-on-save does not reopen them)
 
 **Example:**
 ```javascript
-function foo() {     // <- zc closes ONLY this function
-    if (condition) { // <- zc closes ONLY this if block
+function foo() {     // <- za anywhere inside closes this
+    if (condition) { // <- za anywhere inside closes this
         doStuff();
-    }
-    try {            // <- zc closes ONLY this try block
-        riskyCall();
-    } catch (e) {    // <- zc closes ONLY this catch block
-        handle(e);   // <- cursor here, zc closes the catch block
     }
 }
 ```
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `za` | Normal | Toggle fold under cursor |
-| `zo` | Normal | Open fold under cursor |
-| `zc` | Normal | Close fold under cursor (the block you're inside) |
-| `zO` | Normal | Open all folds under cursor recursively |
-| `zC` | Normal | Close all folds under cursor recursively |
+| `za` | Normal | Smart fold toggle — collapses innermost block cursor is inside |
 | `zR` | Normal | Open all folds in file |
 | `zM` | Normal | Close all folds in file |
 | `zr` | Normal | Open folds except certain kinds |
 | `zm` | Normal | Close folds by level |
 | `zK` | Normal | Peek folded lines without opening |
 
-**Workflow tip:** Press `zM` to collapse everything, then navigate and use `zo`/`za` to open specific blocks as needed.
+### Terminal
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>tt` | Normal | Open terminal in current window |
+| `<leader>tv` | Normal | Open terminal in vertical split |
+| `<leader>th` | Normal | Open terminal in horizontal split |
+| `jk` | Terminal | Exit terminal mode (normal terminals only) |
+
+### Git (Neogit)
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>lg` | Normal | Open Neogit |
+
+#### Neogit Cheatsheet
+
+Neogit opens as a buffer (Magit-style). Press `q` to close.
+
+**Navigation**
+
+| Key | Description |
+|-----|-------------|
+| `<Tab>` | Expand / collapse section |
+| `j` / `k` | Move down / up |
+| `<Enter>` | Open file / go to commit |
+| `?` | Open keybindings help |
+
+**Staging & Committing**
+
+| Key | Description |
+|-----|-------------|
+| `s` | Stage file or hunk |
+| `S` | Stage all unstaged files |
+| `u` | Unstage file or hunk |
+| `U` | Unstage all staged files |
+| `x` | Discard change |
+| `c` | Open commit popup |
+| `cc` | Commit |
+| `ca` | Amend last commit |
+| `ce` | Extend last commit (no edit) |
+
+**Diff**
+
+| Key | Description |
+|-----|-------------|
+| `d` | Open diffview for file |
+| `<Enter>` | Inline diff expand |
+
+**Branches**
+
+| Key | Description |
+|-----|-------------|
+| `b` | Open branch popup |
+| `bb` | Checkout branch |
+| `bc` | Create branch |
+| `bm` | Rename branch |
+| `bd` | Delete branch |
+
+**Push / Pull / Fetch**
+
+| Key | Description |
+|-----|-------------|
+| `p` | Open pull popup |
+| `pp` | Pull |
+| `P` | Open push popup |
+| `PP` | Push |
+| `f` | Open fetch popup |
+| `ff` | Fetch |
+
+**Stash**
+
+| Key | Description |
+|-----|-------------|
+| `Z` | Open stash popup |
+| `Zz` | Stash |
+| `Zp` | Pop stash |
+
+**Log**
+
+| Key | Description |
+|-----|-------------|
+| `l` | Open log popup |
+| `ll` | Log current branch |
+| `la` | Log all branches |
+
+**Rebase**
+
+| Key | Description |
+|-----|-------------|
+| `r` | Open rebase popup |
+| `ri` | Interactive rebase |
+| `rr` | Continue rebase |
+| `ra` | Abort rebase |
 
 ### Line Movement
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<A-j>` | Normal | Move line down |
-| `<A-k>` | Normal | Move line up |
-| `<A-j>` | Visual | Move selection down |
-| `<A-k>` | Visual | Move selection up |
-| `<A-j>` | Insert | Move line down |
-| `<A-k>` | Insert | Move line up |
+| `<A-j>` | Normal/Visual/Insert | Move line/selection down |
+| `<A-k>` | Normal/Visual/Insert | Move line/selection up |
 
 ### File Explorer (Oil.nvim)
 
@@ -225,21 +308,15 @@ function foo() {     // <- zc closes ONLY this function
 | `<leader>cs` | Normal | Toggle symbols |
 | `<leader>cl` | Normal | Toggle LSP definitions/references |
 
-### Harpoon (Quick File Navigation)
+### Harpoon (Quick File/Terminal Navigation)
+
+Harpoon is terminal-aware — if you mark a terminal buffer, navigating back to it jumps to the live terminal process (or opens a new one if the process has exited).
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<leader>ma` | Normal | Add file to harpoon |
+| `<leader>ma` | Normal | Add current file/terminal to harpoon |
 | `<leader>mm` | Normal | Toggle harpoon menu |
-| `<leader>m1` | Normal | Jump to harpoon file 1 |
-| `<leader>m2` | Normal | Jump to harpoon file 2 |
-| `<leader>m3` | Normal | Jump to harpoon file 3 |
-| `<leader>m4` | Normal | Jump to harpoon file 4 |
-| `<leader>m5` | Normal | Jump to harpoon file 5 |
-| `<leader>m6` | Normal | Jump to harpoon file 6 |
-| `<leader>m7` | Normal | Jump to harpoon file 7 |
-| `<leader>m8` | Normal | Jump to harpoon file 8 |
-| `<leader>m9` | Normal | Jump to harpoon file 9 |
+| `<leader>m1`–`m9` | Normal | Jump to harpoon slot 1–9 |
 
 ### Flash.nvim (Enhanced Motion)
 
@@ -270,7 +347,6 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 - `{`, `}`, `B` - Curly braces
 - `<`, `>` - Angle brackets
 - `'`, `"`, `` ` `` - Quotes
-- `?` - User prompt (ask which character to use)
 - `t` - HTML/XML tags
 - `f` - Function call
 - `a` - Function argument
@@ -283,11 +359,24 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 - `viq` - Visually select inside any quote
 - `dab` - Delete around any bracket
 
+### Delete / Cut
+
+By default `d`, `c`, `s`, `x` do **not** yank to clipboard (black hole register). Use `<leader>d` variants to cut (yank + delete).
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `d` / `dd` / `D` | Normal | Delete without yanking |
+| `<leader>d` / `<leader>dd` / `<leader>D` | Normal | Cut (delete + yank) |
+| `c` / `cc` / `C` | Normal | Change without yanking |
+| `x` | Normal | Delete char without yanking |
+
 ### Formatting
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
 | `<leader>fm` | Normal/Visual | Format file or range |
+
+Format on save is enabled by default. Folds are preserved across saves.
 
 ### Markdown (only in .md files)
 
@@ -308,7 +397,7 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 | `<C-k>` | Insert | Previous completion item |
 | `<CR>` | Insert | Confirm selection |
 | `<C-e>` | Insert | Abort completion |
-| `<Tab>` | Insert | Expand snippet / Jump forward |
+| `<Tab>` | Insert | Expand snippet / jump forward |
 | `<S-Tab>` | Insert | Jump backward in snippet |
 | `<C-b>` | Insert | Scroll docs up |
 | `<C-f>` | Insert | Scroll docs down |
@@ -326,7 +415,11 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 ### File Navigation
 - [oil.nvim](https://github.com/stevearc/oil.nvim) - File explorer as a buffer
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) - Fuzzy finder
-- [harpoon](https://github.com/ThePrimeagen/harpoon) - Quick file marks
+- [harpoon](https://github.com/ThePrimeagen/harpoon) - Quick file/terminal marks
+
+### Git
+- [neogit](https://github.com/NeogitOrg/neogit) - Magit-style git interface
+- [diffview.nvim](https://github.com/sindrets/diffview.nvim) - Diff viewer (neogit integration)
 
 ### LSP & Completion
 - [mason.nvim](https://github.com/williamboman/mason.nvim) - LSP installer
@@ -340,7 +433,7 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 - [nvim-autopairs](https://github.com/windwp/nvim-autopairs) - Auto close brackets
 - [conform.nvim](https://github.com/stevearc/conform.nvim) - Code formatting
 - [mini.surround](https://github.com/echasnovski/mini.surround) - Surround text objects
-- [mini.ai](https://github.com/echasnovski/mini.ai) - Enhanced text objects (function, argument, etc.)
+- [mini.ai](https://github.com/echasnovski/mini.ai) - Enhanced text objects
 - [flash.nvim](https://github.com/folke/flash.nvim) - Enhanced motion
 - [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo) - VSCode-like code folding
 
@@ -352,7 +445,6 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 
 ## LSP Servers
 
-Configured language servers:
 - **TypeScript/JavaScript** - ts_ls
 - **C/C++** - clangd
 - **Java** - jdtls
@@ -362,8 +454,8 @@ Configured language servers:
 
 ## Formatters
 
-Auto-formatting on save enabled for:
-- JavaScript/TypeScript - prettier
+Auto-formatting on save (folds preserved):
+- JavaScript/TypeScript/JSX/TSX - prettier
 - HTML/CSS - prettier
 - JSON/YAML/Markdown - prettier
 - Lua - stylua
@@ -372,27 +464,16 @@ Auto-formatting on save enabled for:
 - C/C++ - clang-format
 - PHP - php-cs-fixer
 
-## Customization
-
-Edit `~/.config/nvim/init.lua` to customize:
-- Change colorscheme flavor (line 25)
-- Modify LSP servers (line 213)
-- Add/remove plugins
-- Customize keybindings
-
-After making changes, restart Neovim or run:
-```vim
-:source ~/.config/nvim/init.lua
-```
-
 ## Tips
 
 - Use `<leader>ff` to quickly find files
-- Mark frequently used files with `<leader>ma` and jump with `<leader>m1-9`
+- Mark frequently used files **and terminals** with `<leader>ma`, jump with `<leader>m1`–`9`
 - Press `K` over any symbol to see documentation
 - Use `<leader>ca` for quick code actions
 - Flash jump with `zk` for fast navigation
-- Format on save is enabled by default
+- Format on save is enabled by default — folds stay closed
+- Open Neogit with `<leader>lg`, use `s` to stage, `cc` to commit, `PP` to push
+- Press `?` inside Neogit to see all available keybindings
 
 ## License
 
