@@ -747,7 +747,53 @@ require("lazy").setup({
 		dependencies = { "nvim-lua/plenary.nvim" },
 		config = function()
 			require("harpoon").setup()
+
+			-- Patch nav_file to handle terminal buffers; harpoon's default
+			-- nav_file treats term:// paths as files causing an empty buffer
+			local ui = require("harpoon.ui")
+			local original_nav_file = ui.nav_file
+			ui.nav_file = function(idx)
+				local mark = require("harpoon.mark")
+				local filename = nil
+				local ok, item = pcall(mark.get_marked_file, idx)
+				if ok and item then filename = item.filename end
+				if not filename then
+					local nok, name = pcall(mark.get_marked_file_name, idx)
+					if nok then filename = name end
+				end
+
+				if filename and filename:match("term://") then
+					local home = vim.fn.expand("~")
+					local stored = filename:gsub("^term://~", "term://" .. home)
+					for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+						if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buftype == "terminal" then
+							local buf_name = vim.api.nvim_buf_get_name(buf)
+							local buf_norm = buf_name:gsub("^term://~", "term://" .. home)
+							if buf_norm == stored or buf_name == filename then
+								vim.api.nvim_set_current_buf(buf)
+								vim.cmd("startinsert")
+								return
+							end
+						end
+					end
+					-- Terminal process is gone, open a fresh one
+					vim.cmd("terminal")
+					return
+				end
+
+				original_nav_file(idx)
+			end
 		end,
+	},
+
+	-- Lazygit integration
+	{
+		"kdheepak/lazygit.nvim",
+		dependencies = { "nvim-lua/plenary.nvim" },
+		cmd = "LazyGit",
+		keys = {
+			{ "<leader>lg", "<cmd>LazyGit<cr>", desc = "Open LazyGit" },
+		},
 	},
 
 	-- Conform.nvim for code formatting
@@ -775,11 +821,44 @@ require("lazy").setup({
 					cpp = { "clang-format" },
 					php = { "php-cs-fixer" },
 				},
-				format_on_save = {
-					lsp_fallback = true,
-					async = false,
-					timeout_ms = 1000,
-				},
+			})
+
+			-- Format on save with fold preservation
+			local _saved_folds = {}
+			vim.api.nvim_create_autocmd("BufWritePre", {
+				callback = function(args)
+					-- Save which lines have closed folds
+					local closed = {}
+					local lcount = vim.api.nvim_buf_line_count(args.buf)
+					local i = 1
+					while i <= lcount do
+						if vim.fn.foldclosed(i) == i then
+							table.insert(closed, i)
+							i = vim.fn.foldclosedend(i) + 1
+						else
+							i = i + 1
+						end
+					end
+					_saved_folds[args.buf] = closed
+					conform.format({ bufnr = args.buf, lsp_fallback = true, async = false, timeout_ms = 1000 })
+				end,
+			})
+
+			vim.api.nvim_create_autocmd("BufWritePost", {
+				callback = function(args)
+					local closed = _saved_folds[args.buf]
+					if closed and #closed > 0 then
+						vim.schedule(function()
+							local lcount = vim.api.nvim_buf_line_count(args.buf)
+							for _, lnum in ipairs(closed) do
+								if lnum <= lcount then
+									pcall(vim.cmd, lnum .. "foldclose")
+								end
+							end
+							_saved_folds[args.buf] = nil
+						end)
+					end
+				end,
 			})
 
 			vim.keymap.set({ "n", "v" }, "<leader>fm", function()
@@ -977,9 +1056,64 @@ require("lazy").setup({
 		"kevinhwang91/nvim-ufo",
 		dependencies = { "kevinhwang91/promise-async" },
 		config = function()
-			-- Custom provider that excludes closing bracket line from fold range
+				-- Fold display: "function foo() { ···" with closing bracket on next line
+			local fold_virt_text_handler = function(virtText, lnum, endLnum, width, truncate)
+				local newVirtText = {}
+				local suffix = " ···"
+				local sufWidth = vim.fn.strdisplaywidth(suffix)
+				local targetWidth = width - sufWidth
+				local curWidth = 0
+				for _, chunk in ipairs(virtText) do
+					local chunkText = chunk[1]
+					local chunkWidth = vim.fn.strdisplaywidth(chunkText)
+					if targetWidth > curWidth + chunkWidth then
+						table.insert(newVirtText, chunk)
+					else
+						chunkText = truncate(chunkText, targetWidth - curWidth)
+						local hlGroup = chunk[2]
+						table.insert(newVirtText, { chunkText, hlGroup })
+						break
+					end
+					curWidth = curWidth + chunkWidth
+				end
+				table.insert(newVirtText, { suffix, "Comment" })
+				return newVirtText
+			end
+
+			local function apply_end_line_fix(ranges)
+				for _, range in ipairs(ranges or {}) do
+					if range.endLine > range.startLine then
+						range.endLine = range.endLine - 1
+					end
+				end
+				return ranges
+			end
+
 			require("ufo").setup({
+				fold_virt_text_handler = fold_virt_text_handler,
 				provider_selector = function(bufnr, filetype, buftype)
+					-- JS/TS: use treesitter — LSP misses object method functions
+					local ts_ft = {
+						javascript = true, typescript = true,
+						javascriptreact = true, typescriptreact = true,
+					}
+					if ts_ft[filetype] then
+						return function(bufnr)
+							-- getFolds may return a raw table (sync) or a promise (async)
+							local function get_ranges(provider)
+								local ok, result = pcall(require("ufo").getFolds, bufnr, provider)
+								if not ok or not result then return nil end
+								return result
+							end
+							local result = get_ranges("treesitter") or get_ranges("indent") or {}
+							-- if it is a promise chain it, otherwise apply fix directly
+							if type(result) == "table" and type(result.thenCall) == "function" then
+								return result:thenCall(apply_end_line_fix)
+							end
+							return apply_end_line_fix(result)
+						end
+					end
+					-- All other filetypes: LSP with indent fallback
 					return function(bufnr)
 						local function handleFallbackException(err, providerName)
 							if type(err) == "string" and err:match("UfoFallbackException") then
@@ -988,17 +1122,9 @@ require("lazy").setup({
 								return require("promise-async").reject(err)
 							end
 						end
-
 						return require("ufo").getFolds(bufnr, "lsp"):catch(function(err)
 							return handleFallbackException(err, "indent")
-						end):thenCall(function(ranges)
-							for _, range in ipairs(ranges or {}) do
-								if range.endLine > range.startLine then
-									range.endLine = range.endLine - 1
-								end
-							end
-							return ranges
-						end)
+						end):thenCall(apply_end_line_fix)
 					end
 				end,
 			})
@@ -1069,6 +1195,25 @@ vim.keymap.set("n", "zM", function() require("ufo").closeAllFolds() end, { desc 
 vim.keymap.set("n", "zr", function() require("ufo").openFoldsExceptKinds() end, { desc = "Open folds except kinds" })
 vim.keymap.set("n", "zm", function() require("ufo").closeFoldsWith() end, { desc = "Close folds with level" })
 vim.keymap.set("n", "zK", function() require("ufo").peekFoldedLinesUnderCursor() end, { desc = "Peek fold" })
+
+-- Smart fold toggle: if on a closed fold open it, otherwise find the innermost
+-- enclosing fold (the {} the cursor is inside) and close that
+vim.keymap.set("n", "za", function()
+	local lnum = vim.fn.line(".")
+	if vim.fn.foldclosed(lnum) ~= -1 then
+		vim.cmd("normal! zo")
+		return
+	end
+	-- Walk backward to find where the innermost enclosing fold starts
+	for i = lnum, 1, -1 do
+		local fl = vim.fn.foldlevel(i)
+		if fl > 0 and fl > (i > 1 and vim.fn.foldlevel(i - 1) or 0) then
+			vim.api.nvim_win_set_cursor(0, { i, 0 })
+			vim.cmd("normal! zc")
+			return
+		end
+	end
+end, { desc = "Smart fold toggle (innermost)" })
 
 -- Tab management keybindings
 vim.keymap.set("n", "<leader>to", ":tabnew<CR>", { desc = "Open new tab" })
@@ -1169,6 +1314,7 @@ vim.keymap.set("n", "<C-p>", "<C-i>", { desc = "Jump forward in jumplist" })
 vim.keymap.set("n", "<C-o>", "<C-o>", { desc = "Jump back in jumplist" })
 
 -- Terminal open in split
+vim.keymap.set("n", "<leader>tt", ":terminal<CR>")
 vim.keymap.set("n", "<leader>tv", ":botright vsplit | terminal<CR>")
 vim.keymap.set("n", "<leader>th", ":botright split | terminal<CR>")
 vim.keymap.set("t", "jk", [[<C-\><C-n>]])
@@ -1199,78 +1345,26 @@ vim.keymap.set("n", "<leader>mm", function()
 	ui.toggle_quick_menu()
 end, { desc = "Toggle harpoon menu" })
 
--- Simple navigation keybindings
-vim.keymap.set("n", "<leader>m1", function()
+-- Terminal-aware harpoon navigation:
+-- if the stored entry is a terminal (term://...), jump to the live buffer if it
+-- still exists, otherwise open a fresh terminal instead of an empty text file
+local function nav_harpoon(idx)
 	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(1)
-	end
-end, { desc = "Harpoon file 1" })
+	if not ok then return end
+	harpoon.setup()
+	require("harpoon.ui").nav_file(idx)
+end
 
-vim.keymap.set("n", "<leader>m2", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(2)
-	end
-end, { desc = "Harpoon file 2" })
-
-vim.keymap.set("n", "<leader>m3", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(3)
-	end
-end, { desc = "Harpoon file 3" })
-
-vim.keymap.set("n", "<leader>m4", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(4)
-	end
-end, { desc = "Harpoon file 4" })
-
-vim.keymap.set("n", "<leader>m5", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(5)
-	end
-end, { desc = "Harpoon file 5" })
-
-vim.keymap.set("n", "<leader>m6", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(6)
-	end
-end, { desc = "Harpoon file 6" })
-
-vim.keymap.set("n", "<leader>m7", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(7)
-	end
-end, { desc = "Harpoon file 7" })
-
-vim.keymap.set("n", "<leader>m8", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(8)
-	end
-end, { desc = "Harpoon file 8" })
-
-vim.keymap.set("n", "<leader>m9", function()
-	local ok, harpoon = pcall(require, "harpoon")
-	if ok then
-		harpoon.setup()
-		require("harpoon.ui").nav_file(9)
-	end
-end, { desc = "Harpoon file 9" })
+-- Navigation keybindings
+vim.keymap.set("n", "<leader>m1", function() nav_harpoon(1) end, { desc = "Harpoon file 1" })
+vim.keymap.set("n", "<leader>m2", function() nav_harpoon(2) end, { desc = "Harpoon file 2" })
+vim.keymap.set("n", "<leader>m3", function() nav_harpoon(3) end, { desc = "Harpoon file 3" })
+vim.keymap.set("n", "<leader>m4", function() nav_harpoon(4) end, { desc = "Harpoon file 4" })
+vim.keymap.set("n", "<leader>m5", function() nav_harpoon(5) end, { desc = "Harpoon file 5" })
+vim.keymap.set("n", "<leader>m6", function() nav_harpoon(6) end, { desc = "Harpoon file 6" })
+vim.keymap.set("n", "<leader>m7", function() nav_harpoon(7) end, { desc = "Harpoon file 7" })
+vim.keymap.set("n", "<leader>m8", function() nav_harpoon(8) end, { desc = "Harpoon file 8" })
+vim.keymap.set("n", "<leader>m9", function() nav_harpoon(9) end, { desc = "Harpoon file 9" })
 
 -- Enable line numbers in LSP Saga floating windows
 vim.api.nvim_create_autocmd("FileType", {
