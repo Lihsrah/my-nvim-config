@@ -1334,7 +1334,9 @@ vim.api.nvim_create_autocmd("TermOpen", {
 })
 
 -- Neogit
-vim.keymap.set("n", "<leader>lg", "<cmd>Neogit<cr>", { desc = "Open Neogit" })
+vim.keymap.set("n", "<leader>lg", function()
+	require("neogit").open({ cwd = vim.fn.expand("%:p:h") })
+end, { desc = "Open Neogit" })
 
 -- Harpoon keybindings (with proper initialization)
 vim.keymap.set("n", "<leader>ma", function()
