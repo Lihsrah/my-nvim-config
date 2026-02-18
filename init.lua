@@ -1352,11 +1352,26 @@ vim.keymap.set("n", "<leader>lg", function()
 end, { desc = "Open Neogit" })
 
 -- Octo (GitHub) keybindings
+-- PRs
 vim.keymap.set("n", "<leader>gpc", "<cmd>Octo pr create<cr>", { desc = "Create PR" })
 vim.keymap.set("n", "<leader>gpl", "<cmd>Octo pr list<cr>", { desc = "List PRs" })
-vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
+vim.keymap.set("n", "<leader>gpm", "<cmd>Octo pr merge<cr>", { desc = "Merge PR" })
+vim.keymap.set("n", "<leader>gpC", "<cmd>Octo pr checkout<cr>", { desc = "Checkout PR branch" })
+vim.keymap.set("n", "<leader>gpk", "<cmd>Octo pr checks<cr>", { desc = "PR checks / CI status" })
+vim.keymap.set("n", "<leader>gpr", "<cmd>Octo pr ready<cr>", { desc = "Mark PR as ready (convert from draft)" })
+vim.keymap.set("n", "<leader>gpx", "<cmd>Octo pr close<cr>", { desc = "Close PR" })
+-- Issues
 vim.keymap.set("n", "<leader>gic", "<cmd>Octo issue create<cr>", { desc = "Create issue" })
+vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
+vim.keymap.set("n", "<leader>gix", "<cmd>Octo issue close<cr>", { desc = "Close issue" })
+-- Reviews
 vim.keymap.set("n", "<leader>grs", "<cmd>Octo review start<cr>", { desc = "Start review" })
+vim.keymap.set("n", "<leader>grS", "<cmd>Octo review submit<cr>", { desc = "Submit review (approve/comment/request changes)" })
+vim.keymap.set("n", "<leader>grD", "<cmd>Octo review discard<cr>", { desc = "Discard review" })
+-- Misc
+vim.keymap.set("n", "<leader>gco", "<cmd>Octo comment add<cr>", { desc = "Add comment" })
+vim.keymap.set("n", "<leader>gra", "<cmd>Octo reviewer add<cr>", { desc = "Add reviewer" })
+vim.keymap.set("n", "<leader>gla", "<cmd>Octo label add<cr>", { desc = "Add label" })
 
 -- Harpoon keybindings (with proper initialization)
 vim.keymap.set("n", "<leader>ma", function()

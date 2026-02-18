@@ -11,6 +11,7 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - **Telescope** fuzzy finder
 - **Harpoon** for quick file/terminal navigation (terminal-aware)
 - **Neogit** git interface (Magit-style, with diffview)
+- **Octo.nvim** GitHub integration (PRs, issues, reviews — no browser needed)
 - **Markdown** support with preview and tables
 - **Flash.nvim** for enhanced motion
 - **Conform.nvim** for code formatting (folds preserved on save)
@@ -29,6 +30,7 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - A Nerd Font (for icons)
 - ripgrep (for Telescope live_grep)
 - Node.js (for LSP servers)
+- [gh CLI](https://cli.github.com/) (for Octo.nvim GitHub integration) — `brew install gh && gh auth login`
 
 ### Install
 
@@ -173,7 +175,7 @@ function foo() {     // <- za anywhere inside closes this
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<leader>lg` | Normal | Open Neogit |
+| `<leader>lg` | Normal | Open Neogit (in current file's git repo) |
 
 #### Neogit Cheatsheet
 
@@ -254,6 +256,46 @@ Neogit opens as a buffer (Magit-style). Press `q` to close.
 | `ri` | Interactive rebase |
 | `rr` | Continue rebase |
 | `ra` | Abort rebase |
+
+### GitHub (Octo.nvim)
+
+Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with the list commands, then use the action shortcuts.
+
+**Pull Requests (`<leader>gp`)**
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>gpc` | Normal | Create PR |
+| `<leader>gpl` | Normal | List PRs |
+| `<leader>gpm` | Normal | Merge PR |
+| `<leader>gpC` | Normal | Checkout PR branch locally |
+| `<leader>gpk` | Normal | PR checks / CI status |
+| `<leader>gpr` | Normal | Mark PR as ready (convert from draft) |
+| `<leader>gpx` | Normal | Close PR |
+
+**Issues (`<leader>gi`)**
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>gic` | Normal | Create issue |
+| `<leader>gil` | Normal | List issues |
+| `<leader>gix` | Normal | Close issue |
+
+**Reviews (`<leader>gr`)**
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>grs` | Normal | Start review |
+| `<leader>grS` | Normal | Submit review (approve / request changes / comment) |
+| `<leader>grD` | Normal | Discard review |
+
+**Misc**
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>gco` | Normal | Add comment |
+| `<leader>gra` | Normal | Add reviewer |
+| `<leader>gla` | Normal | Add label |
 
 ### Line Movement
 
@@ -420,6 +462,7 @@ Format on save is enabled by default. Folds are preserved across saves.
 ### Git
 - [neogit](https://github.com/NeogitOrg/neogit) - Magit-style git interface
 - [diffview.nvim](https://github.com/sindrets/diffview.nvim) - Diff viewer (neogit integration)
+- [octo.nvim](https://github.com/pwntester/octo.nvim) - GitHub PRs, issues, and reviews inside Neovim
 
 ### LSP & Completion
 - [mason.nvim](https://github.com/williamboman/mason.nvim) - LSP installer
