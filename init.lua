@@ -759,6 +759,19 @@ require("lazy").setup({
 		end,
 	},
 
+	-- Octo - GitHub integration (PRs, issues, reviews)
+	{
+		"pwntester/octo.nvim",
+		dependencies = {
+			"nvim-lua/plenary.nvim",
+			"nvim-telescope/telescope.nvim",
+			"nvim-tree/nvim-web-devicons",
+		},
+		config = function()
+			require("octo").setup()
+		end,
+	},
+
 	-- Harpoon for quick file navigation
 	{
 		"ThePrimeagen/harpoon",
@@ -1337,6 +1350,13 @@ vim.api.nvim_create_autocmd("TermOpen", {
 vim.keymap.set("n", "<leader>lg", function()
 	require("neogit").open({ cwd = vim.fn.expand("%:p:h") })
 end, { desc = "Open Neogit" })
+
+-- Octo (GitHub) keybindings
+vim.keymap.set("n", "<leader>gpc", "<cmd>Octo pr create<cr>", { desc = "Create PR" })
+vim.keymap.set("n", "<leader>gpl", "<cmd>Octo pr list<cr>", { desc = "List PRs" })
+vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
+vim.keymap.set("n", "<leader>gic", "<cmd>Octo issue create<cr>", { desc = "Create issue" })
+vim.keymap.set("n", "<leader>grs", "<cmd>Octo review start<cr>", { desc = "Start review" })
 
 -- Harpoon keybindings (with proper initialization)
 vim.keymap.set("n", "<leader>ma", function()
