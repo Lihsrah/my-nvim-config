@@ -768,7 +768,9 @@ require("lazy").setup({
 			"nvim-tree/nvim-web-devicons",
 		},
 		config = function()
-			require("octo").setup()
+			require("octo").setup({
+				gh_cmd = vim.fn.expand("~/.config/nvim/bin/gh-octo"),
+			})
 		end,
 	},
 
@@ -1366,6 +1368,7 @@ vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List is
 vim.keymap.set("n", "<leader>gix", "<cmd>Octo issue close<cr>", { desc = "Close issue" })
 -- Reviews
 vim.keymap.set("n", "<leader>grs", "<cmd>Octo review start<cr>", { desc = "Start review" })
+vim.keymap.set("n", "<leader>grr", "<cmd>Octo review resume<cr>", { desc = "Resume existing pending review" })
 vim.keymap.set("n", "<leader>grS", "<cmd>Octo review submit<cr>", { desc = "Submit review (approve/comment/request changes)" })
 vim.keymap.set("n", "<leader>grD", "<cmd>Octo review discard<cr>", { desc = "Discard review" })
 -- Misc
