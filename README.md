@@ -54,7 +54,7 @@ nvim
 | Shortcut | Mode | Description |
 |----------|------|-------------|
 | `jk` | Insert | Exit insert mode |
-| `jk` | Terminal | Exit terminal mode (not in lazygit) |
+| `jk` | Terminal | Exit terminal mode |
 | `<Esc>` | Normal | Clear search highlighting |
 
 ### Window Management
@@ -83,10 +83,12 @@ nvim
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<C-u>` | Normal/Visual | Scroll down half page (centered) |
-| `<C-i>` | Normal/Visual | Scroll up half page (centered) |
-| `<C-p>` | Normal | Jump forward in jumplist |
+| `<C-d>` | Normal | Scroll down half page |
+| `<C-u>` | Normal | Scroll up half page |
+| `<C-f>` | Normal | Scroll down full page |
+| `<C-b>` | Normal | Scroll up full page |
 | `<C-o>` | Normal | Jump back in jumplist |
+| `<C-i>` | Normal | Jump forward in jumplist |
 
 ### Block Navigation
 
@@ -286,6 +288,7 @@ Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with th
 | Shortcut | Mode | Description |
 |----------|------|-------------|
 | `<leader>grs` | Normal | Start review |
+| `<leader>grr` | Normal | Resume existing pending review |
 | `<leader>grS` | Normal | Submit review (approve / request changes / comment) |
 | `<leader>grD` | Normal | Discard review |
 

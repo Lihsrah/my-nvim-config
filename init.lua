@@ -1277,10 +1277,6 @@ vim.keymap.set(
 )
 
 -- Half-page scrolling keybindings with centering
-vim.keymap.set("n", "<C-u>", "<C-d>zz", { desc = "Scroll down half page" })
-vim.keymap.set("n", "<C-i>", "<C-u>zz", { desc = "Scroll up half page" })
-vim.keymap.set("v", "<C-u>", "<C-d>zz", { desc = "Scroll down half page" })
-vim.keymap.set("v", "<C-i>", "<C-u>zz", { desc = "Scroll up half page" })
 
 -- Telescope keybindings
 vim.keymap.set("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Find files" })
@@ -1333,9 +1329,6 @@ vim.keymap.set("v", "<A-k>", ":m '<-2<CR>gv=gv", { desc = "Move selection up" })
 vim.keymap.set("i", "<A-j>", "<Esc>:m .+1<CR>==gi", { desc = "Move line down (insert mode)" })
 vim.keymap.set("i", "<A-k>", "<Esc>:m .-2<CR>==gi", { desc = "Move line up (insert mode)" })
 
--- Swap jumplist navigation keybindings
-vim.keymap.set("n", "<C-p>", "<C-i>", { desc = "Jump forward in jumplist" })
-vim.keymap.set("n", "<C-o>", "<C-o>", { desc = "Jump back in jumplist" })
 
 -- Terminal open in split
 vim.keymap.set("n", "<leader>tt", ":terminal<CR>")
