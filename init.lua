@@ -1,3 +1,7 @@
+-- Set leader key before lazy so plugins pick it up at setup time
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
 -- Bootstrap lazy.nvim plugin manager
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
@@ -85,6 +89,30 @@ require("lazy").setup({
 				},
 			})
 			vim.cmd.colorscheme("catppuccin")
+		end,
+	},
+
+	-- Which-key: shows available keybindings in a popup when you pause after <leader>
+	{
+		"folke/which-key.nvim",
+		event = "VeryLazy",
+		config = function()
+			local wk = require("which-key")
+			wk.setup({ delay = 500 })
+			-- Register key group labels so the popup shows meaningful names
+			wk.add({
+				{ "<leader>f",  group = "find (telescope)" },
+				{ "<leader>g",  group = "git / github" },
+				{ "<leader>gp", group = "pull requests" },
+				{ "<leader>gi", group = "issues" },
+				{ "<leader>gr", group = "reviews" },
+				{ "<leader>h",  group = "hunks (gitsigns)" },
+				{ "<leader>m",  group = "marks (harpoon)" },
+				{ "<leader>t",  group = "tabs / terminal" },
+				{ "<leader>s",  group = "splits" },
+				{ "<leader>x",  group = "diagnostics (trouble)" },
+				{ "<leader>c",  group = "code" },
+			})
 		end,
 	},
 
@@ -211,12 +239,13 @@ require("lazy").setup({
 		config = function()
 			require("mason-lspconfig").setup({
 				ensure_installed = {
-					"ts_ls", -- TypeScript/JavaScript
-					"clangd", -- C/C++
-					"jdtls", -- Java
+					"ts_ls",        -- TypeScript/JavaScript
+					"clangd",       -- C/C++
+					"jdtls",        -- Java
 					"intelephense", -- PHP
-					"html", -- HTML
-					"cssls", -- CSS
+					"html",         -- HTML
+					"cssls",        -- CSS
+					"lua_ls",       -- Lua
 				},
 			})
 		end,
@@ -284,8 +313,24 @@ require("lazy").setup({
 				capabilities = capabilities,
 			}
 
+			-- Lua
+			vim.lsp.config.lua_ls = {
+				cmd = { "lua-language-server" },
+				filetypes = { "lua" },
+				root_markers = { ".luarc.json", ".luarc.jsonc", ".git" },
+				capabilities = capabilities,
+				settings = {
+					Lua = {
+						runtime = { version = "LuaJIT" },
+						workspace = { library = vim.api.nvim_get_runtime_file("", true), checkThirdParty = false },
+						diagnostics = { globals = { "vim" } },
+						telemetry = { enable = false },
+					},
+				},
+			}
+
 			-- Enable LSP servers
-			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls" })
+			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls" })
 
 			-- LSP keybindings (replaced with LSP Saga enhanced versions)
 			vim.keymap.set("n", "gd", "<cmd>Lspsaga goto_definition<CR>", { desc = "Go to definition" })
@@ -759,6 +804,43 @@ require("lazy").setup({
 		end,
 	},
 
+	-- Gitsigns - git status in the gutter and hunk operations
+	{
+		"lewis6991/gitsigns.nvim",
+		config = function()
+			require("gitsigns").setup({
+				signs = {
+					add          = { text = "▎" },
+					change       = { text = "▎" },
+					delete       = { text = "" },
+					topdelete    = { text = "" },
+					changedelete = { text = "▎" },
+				},
+				on_attach = function(bufnr)
+					local gs = package.loaded.gitsigns
+					local map = function(mode, l, r, desc)
+						vim.keymap.set(mode, l, r, { buffer = bufnr, desc = desc })
+					end
+					-- Navigate hunks
+					map("n", "]h", gs.next_hunk, "Next hunk")
+					map("n", "[h", gs.prev_hunk, "Prev hunk")
+					-- Stage / reset
+					map("n", "<leader>hs", gs.stage_hunk, "Stage hunk")
+					map("n", "<leader>hr", gs.reset_hunk, "Reset hunk")
+					map("v", "<leader>hs", function() gs.stage_hunk({ vim.fn.line("."), vim.fn.line("v") }) end, "Stage hunk")
+					map("v", "<leader>hr", function() gs.reset_hunk({ vim.fn.line("."), vim.fn.line("v") }) end, "Reset hunk")
+					-- Blame
+					map("n", "<leader>hb", function() gs.blame_line({ full = true }) end, "Blame line")
+					map("n", "<leader>hB", gs.toggle_current_line_blame, "Toggle inline blame")
+					-- Preview hunk diff
+					map("n", "<leader>hp", gs.preview_hunk, "Preview hunk")
+					-- Diff current file
+					map("n", "<leader>hd", gs.diffthis, "Diff this file")
+				end,
+			})
+		end,
+	},
+
 	-- Octo - GitHub integration (PRs, issues, reviews)
 	{
 		"pwntester/octo.nvim",
@@ -1080,10 +1162,73 @@ require("lazy").setup({
 		"kevinhwang91/nvim-ufo",
 		dependencies = { "kevinhwang91/promise-async" },
 		config = function()
-				-- Fold display: "function foo() { ···" with closing bracket on next line
+			-- Collect fold ranges for blocks of consecutive single-line comments
+			local function get_comment_ranges(bufnr)
+				local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+				local cms = vim.bo[bufnr].commentstring or "// %s"
+				local prefix = vim.trim(cms:match("^(.-)%s*%%s") or "//")
+				if prefix == "" then return {} end
+				local ranges, start = {}, nil
+				for i, line in ipairs(lines) do
+					local trimmed = vim.trim(line)
+					if trimmed ~= "" and vim.startswith(trimmed, prefix) then
+						start = start or (i - 1)
+					else
+						if start ~= nil then
+							if (i - 2) > start then
+								table.insert(ranges, { startLine = start, endLine = i - 2 })
+							end
+							start = nil
+						end
+					end
+				end
+				if start ~= nil and (#lines - 1) > start then
+					table.insert(ranges, { startLine = start, endLine = #lines - 1 })
+				end
+				return ranges
+			end
+
+			-- Merge comment ranges into existing ranges without duplicates
+			local function merge_comment_ranges(ranges, comment_ranges)
+				local seen = {}
+				for _, r in ipairs(ranges or {}) do
+					seen[r.startLine .. ":" .. r.endLine] = true
+				end
+				local result = vim.deepcopy(ranges or {})
+				for _, cr in ipairs(comment_ranges) do
+					if not seen[cr.startLine .. ":" .. cr.endLine] then
+						table.insert(result, cr)
+					end
+				end
+				return result
+			end
+
+			-- Fold display: show catch/finally inline, e.g. "try { ··· } catch(e) { ···"
 			local fold_virt_text_handler = function(virtText, lnum, endLnum, width, truncate)
 				local newVirtText = {}
+
+				-- Scan for } catch / } finally only at depth 1 (direct clause of this
+				-- fold's block). Nested try/catch inside an if won't bleed through.
 				local suffix = " ···"
+				local buf = vim.api.nvim_get_current_buf()
+				local inner = vim.api.nvim_buf_get_lines(buf, lnum + 1, endLnum, false)
+				local depth = 1 -- start inside the fold's own opening {
+				for _, line in ipairs(inner) do
+					local t = vim.trim(line)
+					if depth == 1 then
+						local m = t:match "^(}%s*catch%s*%b()%s*{?)" or t:match "^(}%s*finally%s*{?)"
+						if m then
+							suffix = " ··· " .. vim.trim(m) .. " ···"
+							break
+						end
+					end
+					for ch in line:gmatch "." do
+						if ch == "{" then depth = depth + 1
+						elseif ch == "}" then depth = depth - 1
+						end
+					end
+				end
+
 				local sufWidth = vim.fn.strdisplaywidth(suffix)
 				local targetWidth = width - sufWidth
 				local curWidth = 0
@@ -1113,6 +1258,58 @@ require("lazy").setup({
 				return ranges
 			end
 
+			-- Split compound blocks (try/catch/finally, if/else if/else) into
+			-- independent folds so each clause can be collapsed separately.
+			-- Uses brace-depth tracking so nested boundaries (e.g. a } else
+			-- inside an inner if) are never mistaken for top-level splits.
+			local function split_compound_blocks(bufnr, ranges)
+				local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+				local result = {}
+				for _, range in ipairs(ranges or {}) do
+					local current_start = range.startLine
+					local splits = {}
+					local depth = 0
+
+					for i = range.startLine, range.endLine do
+						local line = lines[i + 1] or ""
+						local trimmed = vim.trim(line)
+
+						-- Check for a clause boundary BEFORE counting braces on this line.
+						-- depth == 1 means the } on this line closes the top-level block of
+						-- our range, so the boundary belongs to the outermost compound statement.
+						if i > range.startLine and i < range.endLine then
+							local is_boundary = trimmed:match "^}%s*catch"
+								or trimmed:match "^}%s*finally"
+								or trimmed:match "^}%s*else%s*{"
+								or trimmed:match "^}%s*else%s+if"
+							if is_boundary and depth == 1 then
+								table.insert(splits, { startLine = current_start, endLine = i })
+								current_start = i
+							end
+						end
+
+						-- Update brace depth after the boundary check
+						for ch in line:gmatch "." do
+							if ch == "{" then
+								depth = depth + 1
+							elseif ch == "}" then
+								depth = depth - 1
+							end
+						end
+					end
+
+					table.insert(splits, { startLine = current_start, endLine = range.endLine })
+					if #splits > 1 then
+						for _, s in ipairs(splits) do
+							table.insert(result, s)
+						end
+					else
+						table.insert(result, range)
+					end
+				end
+				return result
+			end
+
 			require("ufo").setup({
 				fold_virt_text_handler = fold_virt_text_handler,
 				provider_selector = function(bufnr, filetype, buftype)
@@ -1132,9 +1329,13 @@ require("lazy").setup({
 							local result = get_ranges("treesitter") or get_ranges("indent") or {}
 							-- if it is a promise chain it, otherwise apply fix directly
 							if type(result) == "table" and type(result.thenCall) == "function" then
-								return result:thenCall(apply_end_line_fix)
+								return result:thenCall(function(ranges)
+									local split = split_compound_blocks(bufnr, ranges)
+									return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
+								end)
 							end
-							return apply_end_line_fix(result)
+							local split = split_compound_blocks(bufnr, result)
+							return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
 						end
 					end
 					-- All other filetypes: LSP with indent fallback
@@ -1147,8 +1348,13 @@ require("lazy").setup({
 							end
 						end
 						return require("ufo").getFolds(bufnr, "lsp"):catch(function(err)
+							return handleFallbackException(err, "treesitter")
+						end):catch(function(err)
 							return handleFallbackException(err, "indent")
-						end):thenCall(apply_end_line_fix)
+						end):thenCall(function(ranges)
+							local split = split_compound_blocks(bufnr, ranges)
+							return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
+						end)
 					end
 				end,
 			})
@@ -1188,10 +1394,6 @@ require("lazy").setup({
 	},
 })
 
--- Set leader key to space
-vim.g.mapleader = " "
-vim.g.maplocalleader = " "
-
 -- Basic Neovim settings
 vim.opt.number = true
 vim.opt.relativenumber = true
@@ -1203,6 +1405,13 @@ vim.opt.smartindent = true
 vim.opt.wrap = false
 vim.opt.termguicolors = true
 vim.opt.clipboard = "unnamedplus"
+vim.opt.ignorecase = true    -- search is case-insensitive by default
+vim.opt.smartcase = true     -- ...unless you type a capital letter, then it becomes case-sensitive
+vim.opt.scrolloff = 8        -- always keep 8 lines visible above/below the cursor when scrolling
+vim.opt.splitbelow = true    -- horizontal splits (:split) open below instead of above
+vim.opt.splitright = true    -- vertical splits (:vsplit) open to the right instead of left
+vim.opt.undofile = true      -- save undo history to disk so you can undo even after closing a file
+vim.opt.updatetime = 250     -- milliseconds before CursorHold fires; speeds up LSP hover/diagnostics (default is 4000)
 
 -- Disable mouse to prevent hover selection in completion menu
 vim.opt.mouse = ""
@@ -1212,6 +1421,7 @@ vim.opt.foldcolumn = "1" -- Show fold column
 vim.opt.foldlevel = 99 -- Start with all folds open
 vim.opt.foldlevelstart = 99 -- Start with all folds open for new buffers
 vim.opt.foldenable = true -- Enable folding
+vim.opt.foldopen = "search,tag,quickfix" -- Only auto-open folds for search matches, not cursor movement
 
 -- Folding keybindings (using nvim-ufo)
 vim.keymap.set("n", "zR", function() require("ufo").openAllFolds() end, { desc = "Open all folds" })
@@ -1220,24 +1430,115 @@ vim.keymap.set("n", "zr", function() require("ufo").openFoldsExceptKinds() end, 
 vim.keymap.set("n", "zm", function() require("ufo").closeFoldsWith() end, { desc = "Close folds with level" })
 vim.keymap.set("n", "zK", function() require("ufo").peekFoldedLinesUnderCursor() end, { desc = "Peek fold" })
 
--- Smart fold toggle: if on a closed fold open it, otherwise find the innermost
--- enclosing fold (the {} the cursor is inside) and close that
-vim.keymap.set("n", "za", function()
-	local lnum = vim.fn.line(".")
-	if vim.fn.foldclosed(lnum) ~= -1 then
-		vim.cmd("normal! zo")
-		return
+-- Fold-aware e / w: never enters a closed fold.
+-- Case 1 – cursor IS on the fold header  → navigate within that line only.
+-- Case 2 – cursor is before a fold       → do normal motion, then if we
+--           accidentally entered a fold (it opened), close it and skip past.
+local function is_word_char(c)
+	return type(c) == "string" and c:match("[%w_]") ~= nil
+end
+
+local function next_word_end_in_line(line, col)
+	local n = #line
+	local i = col
+	-- Mid-word → go to end of current word
+	if is_word_char(line:sub(i + 1, i + 1)) and is_word_char(line:sub(i + 2, i + 2)) then
+		while i + 1 < n and is_word_char(line:sub(i + 2, i + 2)) do i = i + 1 end
+		return i
 	end
-	-- Walk backward to find where the innermost enclosing fold starts
-	for i = lnum, 1, -1 do
-		local fl = vim.fn.foldlevel(i)
-		if fl > 0 and fl > (i > 1 and vim.fn.foldlevel(i - 1) or 0) then
-			vim.api.nvim_win_set_cursor(0, { i, 0 })
-			vim.cmd("normal! zc")
+	-- Otherwise advance and find the next word end
+	i = i + 1
+	while i < n and not is_word_char(line:sub(i + 1, i + 1)) do i = i + 1 end
+	if i >= n then return nil end
+	while i + 1 < n and is_word_char(line:sub(i + 2, i + 2)) do i = i + 1 end
+	return is_word_char(line:sub(i + 1, i + 1)) and i or nil
+end
+
+local function next_word_start_in_line(line, col)
+	local n = #line
+	local i = col
+	while i < n and is_word_char(line:sub(i + 1, i + 1)) do i = i + 1 end
+	while i < n and not is_word_char(line:sub(i + 1, i + 1)) do i = i + 1 end
+	return (i < n and is_word_char(line:sub(i + 1, i + 1))) and i or nil
+end
+
+local function fold_safe_motion(motion_key, find_in_line)
+	return function()
+		local lnum = vim.fn.line(".")
+		local col  = vim.fn.col(".") - 1
+		local buf_count = vim.api.nvim_buf_line_count(0)
+
+		-- Case 1: cursor is on the header of a closed fold
+		local fold_end = vim.fn.foldclosedend(lnum)
+		if fold_end ~= -1 then
+			local line = vim.api.nvim_get_current_line()
+			local target = find_in_line(line, col)
+			if target then
+				vim.api.nvim_win_set_cursor(0, { lnum, target })
+			else
+				local skip = fold_end + 1
+				if skip <= buf_count then
+					vim.api.nvim_win_set_cursor(0, { skip, 0 })
+					vim.cmd("normal! " .. motion_key)
+				end
+			end
 			return
 		end
+
+		-- Case 2: not on a fold — snapshot the nearest closed fold ahead so
+		-- we can detect if the motion accidentally enters it.
+		local near_start, near_end = -1, -1
+		for l = lnum, math.min(lnum + 200, buf_count) do
+			local fs = vim.fn.foldclosed(l)
+			if fs ~= -1 then
+				near_start = fs
+				near_end   = vim.fn.foldclosedend(l)
+				break
+			end
+		end
+
+		vim.cmd("normal! " .. motion_key)
+
+		local new_lnum = vim.fn.line(".")
+		if near_start ~= -1 and new_lnum ~= lnum
+			and new_lnum >= near_start and new_lnum <= near_end then
+			-- Motion entered a fold and opened it → close it and skip past
+			vim.api.nvim_win_set_cursor(0, { near_start, 0 })
+			vim.cmd("normal! zc")
+			local skip = near_end + 1
+			if skip <= buf_count then
+				vim.api.nvim_win_set_cursor(0, { skip, 0 })
+				vim.cmd("normal! " .. motion_key)
+			end
+		end
 	end
-end, { desc = "Smart fold toggle (innermost)" })
+end
+
+vim.keymap.set("n", "e", fold_safe_motion("e", next_word_end_in_line),   { desc = "Word end (fold-aware)" })
+vim.keymap.set("n", "w", fold_safe_motion("w", next_word_start_in_line), { desc = "Word forward (fold-aware)" })
+
+-- Smart fold: if { exists after cursor on current line → toggle that block's fold.
+-- Otherwise use [{ to jump to the enclosing opening brace and toggle that fold.
+vim.keymap.set("n", "za", function()
+	local lnum = vim.fn.line(".")
+	local col = vim.fn.col(".") -- 1-indexed byte column
+	local line = vim.api.nvim_get_current_line()
+
+	-- Check if an opening brace exists at or after the cursor on this line
+	local rest = line:sub(col)
+	if not rest:find("{", 1, true) then
+		-- No { after cursor: jump to the enclosing block's opening {
+		vim.cmd("normal! [{")
+		lnum = vim.fn.line(".")
+	end
+
+	-- Toggle the fold at the target line
+	if vim.fn.foldclosed(lnum) ~= -1 then
+		vim.cmd("normal! zo") -- already closed → open it
+	else
+		vim.cmd("normal! zc") -- open → close it
+	end
+end, { desc = "Smart fold: toggle block at cursor { or enclosing block" })
 
 -- Tab management keybindings
 vim.keymap.set("n", "<leader>to", ":tabnew<CR>", { desc = "Open new tab" })
@@ -1298,6 +1599,21 @@ vim.keymap.set("i", "jk", "<ESC>", { desc = "Exit insert mode" })
 
 -- Clear search highlighting
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlighting" })
+
+-- Suppress Neovim's built-in search count (it caps at 99 and shows ">99").
+-- We replace it with our own exact count in the statusline.
+vim.opt.shortmess:append("S")
+
+_G.SearchCount = function()
+  if vim.v.hlsearch == 0 then return "" end
+  -- recompute=1 forces a fresh count with maxcount=0 (no cap)
+  local ok, count = pcall(vim.fn.searchcount, { maxcount = 0, recompute = 1 })
+  if not ok or not count or (count.total or 0) == 0 then return "" end
+  if count.incomplete == 1 then return "[?/?] " end -- timed out
+  return string.format("[%d/%d] ", count.current, count.total)
+end
+
+vim.opt.statusline = "%f %h%m%r %= %{v:lua.SearchCount()}%l:%c "
 
 -- Delete without copying to register (use black hole register)
 vim.keymap.set("n", "d", '"_d', { desc = "Delete without yanking" })
