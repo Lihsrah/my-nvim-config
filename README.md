@@ -20,6 +20,9 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - **Mini.ai** for enhanced text objects (functions, arguments, etc.)
 - **Mini.surround** for surrounding text manipulation
 - **nvim-ufo** for VSCode-like code folding
+- **Bufferline** for visual buffer tabs (like Notepad/browser tabs)
+- **Persistence** for session save/restore across restarts
+- **Notes system** — quick access to todo, brainstorm, and dated scratch notes
 
 ## Installation
 
@@ -70,14 +73,41 @@ nvim
 | `<C-j>` | Normal | Move to window below |
 | `<C-k>` | Normal | Move to window above |
 
-### Tab Management
+### Buffer Tabs (Bufferline)
+
+Buffers are shown as visual tabs at the top of the screen.
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<leader>to` | Normal | Open new tab |
-| `<leader>tn` | Normal | Next tab |
-| `<leader>tp` | Normal | Previous tab |
-| `<leader>tx` | Normal | Close tab |
+| `<leader>to` | Normal | Open new empty buffer tab |
+| `<leader>tn` | Normal | Next buffer tab |
+| `<leader>tp` | Normal | Previous buffer tab |
+| `<leader>tx` | Normal | Close current buffer tab |
+| `<S-l>` | Normal | Next buffer tab |
+| `<S-h>` | Normal | Previous buffer tab |
+| `<leader>bx` | Normal | Close buffer |
+
+### Notes
+
+Quick access to persistent notes. All files live in `~/notes/`.
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>nt` | Normal | Open `todo.md` |
+| `<leader>nb` | Normal | Open `brainstorm.md` |
+| `<leader>nn` | Normal | New dated scratch note (e.g. `scratch-20260304-143012.md`) |
+| `<leader>nf` | Normal | Fuzzy find inside `~/notes/` |
+| `<leader>ng` | Normal | Grep inside `~/notes/` |
+
+### Session (Persistence)
+
+Sessions are auto-saved per directory on exit and can be restored.
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>qs` | Normal | Restore session for current directory |
+| `<leader>ql` | Normal | Restore last session |
+| `<leader>qd` | Normal | Don't save session on exit |
 
 ### Scrolling & Navigation
 
@@ -454,8 +484,12 @@ Format on save is enabled by default. Folds are preserved across saves.
 
 ### Appearance
 - [catppuccin](https://github.com/catppuccin/nvim) - Mocha colorscheme with transparent background
+- [bufferline.nvim](https://github.com/akinsho/bufferline.nvim) - Visual buffer tab bar
 - [smear-cursor](https://github.com/sphamba/smear-cursor.nvim) - Smooth cursor animations
 - [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) - File icons
+
+### Productivity
+- [persistence.nvim](https://github.com/folke/persistence.nvim) - Session save/restore
 
 ### File Navigation
 - [oil.nvim](https://github.com/stevearc/oil.nvim) - File explorer as a buffer
@@ -517,6 +551,8 @@ Auto-formatting on save (folds preserved):
 - Press `K` over any symbol to see documentation
 - Use `<leader>ca` for quick code actions
 - Flash jump with `zk` for fast navigation
+- Use `<leader>nn` to open a fresh dated scratch note anytime — persists across restarts
+- Restore your last session with `<leader>ql` when you reopen Neovim
 - Format on save is enabled by default — folds stay closed
 - Open Neogit with `<leader>lg`, use `s` to stage, `cc` to commit, `PP` to push
 - Press `?` inside Neogit to see all available keybindings
