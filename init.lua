@@ -1162,7 +1162,7 @@ require("lazy").setup({
 		"kevinhwang91/nvim-ufo",
 		dependencies = { "kevinhwang91/promise-async" },
 		config = function()
-			-- Collect fold ranges for blocks of consecutive single-line comments
+			-- Fold consecutive single-line comment blocks
 			local function get_comment_ranges(bufnr)
 				local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 				local cms = vim.bo[bufnr].commentstring or "// %s"
@@ -1188,7 +1188,6 @@ require("lazy").setup({
 				return ranges
 			end
 
-			-- Merge comment ranges into existing ranges without duplicates
 			local function merge_comment_ranges(ranges, comment_ranges)
 				local seen = {}
 				for _, r in ipairs(ranges or {}) do
@@ -1203,160 +1202,86 @@ require("lazy").setup({
 				return result
 			end
 
-			-- Fold display: show catch/finally inline, e.g. "try { ··· } catch(e) { ···"
-			local fold_virt_text_handler = function(virtText, lnum, endLnum, width, truncate)
-				local newVirtText = {}
-
-				-- Scan for } catch / } finally only at depth 1 (direct clause of this
-				-- fold's block). Nested try/catch inside an if won't bleed through.
-				local suffix = " ···"
-				local buf = vim.api.nvim_get_current_buf()
-				local inner = vim.api.nvim_buf_get_lines(buf, lnum + 1, endLnum, false)
-				local depth = 1 -- start inside the fold's own opening {
-				for _, line in ipairs(inner) do
-					local t = vim.trim(line)
-					if depth == 1 then
-						local m = t:match "^(}%s*catch%s*%b()%s*{?)" or t:match "^(}%s*finally%s*{?)"
-						if m then
-							suffix = " ··· " .. vim.trim(m) .. " ···"
-							break
+			-- Generic brace fold provider: works for any language.
+			-- Detects {} blocks by checking if a node's first child is "{" and last is "}".
+			-- No hardcoded node-type lists — C++, Java, Lua, PHP, etc. all work automatically.
+			local function brace_fold_provider(bufnr)
+				local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
+				if not ok or not parser then return nil end
+				local trees = parser:parse()
+				if not trees or not trees[1] then return nil end
+				local ranges = {}
+				local function walk(node)
+					local count = node:child_count()
+					if count >= 2 then
+						local first = node:child(0)
+						local last  = node:child(count - 1)
+						if first and last and first:type() == "{" and last:type() == "}" then
+							local sr, _, er, _ = node:range()
+							if er - 1 > sr then
+								table.insert(ranges, { startLine = sr, endLine = er - 1 })
+							end
 						end
 					end
-					for ch in line:gmatch "." do
-						if ch == "{" then depth = depth + 1
-						elseif ch == "}" then depth = depth - 1
-						end
+					for child in node:iter_children() do
+						walk(child)
 					end
 				end
-
-				local sufWidth = vim.fn.strdisplaywidth(suffix)
-				local targetWidth = width - sufWidth
-				local curWidth = 0
-				for _, chunk in ipairs(virtText) do
-					local chunkText = chunk[1]
-					local chunkWidth = vim.fn.strdisplaywidth(chunkText)
-					if targetWidth > curWidth + chunkWidth then
-						table.insert(newVirtText, chunk)
-					else
-						chunkText = truncate(chunkText, targetWidth - curWidth)
-						local hlGroup = chunk[2]
-						table.insert(newVirtText, { chunkText, hlGroup })
-						break
-					end
-					curWidth = curWidth + chunkWidth
-				end
-				table.insert(newVirtText, { suffix, "Comment" })
-				return newVirtText
-			end
-
-			local function apply_end_line_fix(ranges)
-				for _, range in ipairs(ranges or {}) do
-					if range.endLine > range.startLine then
-						range.endLine = range.endLine - 1
-					end
-				end
+				walk(trees[1]:root())
 				return ranges
 			end
 
-			-- Split compound blocks (try/catch/finally, if/else if/else) into
-			-- independent folds so each clause can be collapsed separately.
-			-- Uses brace-depth tracking so nested boundaries (e.g. a } else
-			-- inside an inner if) are never mistaken for top-level splits.
-			local function split_compound_blocks(bufnr, ranges)
-				local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-				local result = {}
-				for _, range in ipairs(ranges or {}) do
-					local current_start = range.startLine
-					local splits = {}
-					local depth = 0
-
-					for i = range.startLine, range.endLine do
-						local line = lines[i + 1] or ""
-						local trimmed = vim.trim(line)
-
-						-- Check for a clause boundary BEFORE counting braces on this line.
-						-- depth == 1 means the } on this line closes the top-level block of
-						-- our range, so the boundary belongs to the outermost compound statement.
-						if i > range.startLine and i < range.endLine then
-							local is_boundary = trimmed:match "^}%s*catch"
-								or trimmed:match "^}%s*finally"
-								or trimmed:match "^}%s*else%s*{"
-								or trimmed:match "^}%s*else%s+if"
-							if is_boundary and depth == 1 then
-								table.insert(splits, { startLine = current_start, endLine = i })
-								current_start = i
-							end
-						end
-
-						-- Update brace depth after the boundary check
-						for ch in line:gmatch "." do
-							if ch == "{" then
-								depth = depth + 1
-							elseif ch == "}" then
-								depth = depth - 1
-							end
-						end
-					end
-
-					table.insert(splits, { startLine = current_start, endLine = range.endLine })
-					if #splits > 1 then
-						for _, s in ipairs(splits) do
-							table.insert(result, s)
-						end
-					else
-						table.insert(result, range)
-					end
-				end
-				return result
-			end
-
 			require("ufo").setup({
-				fold_virt_text_handler = fold_virt_text_handler,
 				provider_selector = function(bufnr, filetype, buftype)
-					-- JS/TS: use treesitter — LSP misses object method functions
-					local ts_ft = {
-						javascript = true, typescript = true,
-						javascriptreact = true, typescriptreact = true,
-					}
-					if ts_ft[filetype] then
+					local has_ts = pcall(vim.treesitter.get_parser, bufnr)
+					if has_ts then
 						return function(bufnr)
-							-- getFolds may return a raw table (sync) or a promise (async)
-							local function get_ranges(provider)
-								local ok, result = pcall(require("ufo").getFolds, bufnr, provider)
-								if not ok or not result then return nil end
-								return result
-							end
-							local result = get_ranges("treesitter") or get_ranges("indent") or {}
-							-- if it is a promise chain it, otherwise apply fix directly
-							if type(result) == "table" and type(result.thenCall) == "function" then
-								return result:thenCall(function(ranges)
-									local split = split_compound_blocks(bufnr, ranges)
-									return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
-								end)
-							end
-							local split = split_compound_blocks(bufnr, result)
-							return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
+							local ranges = brace_fold_provider(bufnr)
+							return merge_comment_ranges(ranges or {}, get_comment_ranges(bufnr))
 						end
 					end
-					-- All other filetypes: LSP with indent fallback
-					return function(bufnr)
-						local function handleFallbackException(err, providerName)
-							if type(err) == "string" and err:match("UfoFallbackException") then
-								return require("ufo").getFolds(bufnr, providerName)
-							else
-								return require("promise-async").reject(err)
-							end
-						end
-						return require("ufo").getFolds(bufnr, "lsp"):catch(function(err)
-							return handleFallbackException(err, "treesitter")
-						end):catch(function(err)
-							return handleFallbackException(err, "indent")
-						end):thenCall(function(ranges)
-							local split = split_compound_blocks(bufnr, ranges)
-							return apply_end_line_fix(merge_comment_ranges(split, get_comment_ranges(bufnr)))
-						end)
-					end
+					return { "lsp", "indent" }
 				end,
+			})
+		end,
+	},
+
+	-- Bufferline: visual tab bar for open buffers
+	{
+		"akinsho/bufferline.nvim",
+		dependencies = "nvim-tree/nvim-web-devicons",
+		config = function()
+			require("bufferline").setup({
+				options = {
+					mode = "buffers",
+					separator_style = "thick",
+					show_buffer_close_icons = true,
+					show_close_icon = false,
+					diagnostics = "nvim_lsp",
+					indicator = { style = "underline" },
+				},
+				highlights = {
+					-- Active tab: brighter background + colored underline, text unchanged
+					buffer_selected = {
+						bg = "#313244",
+						underline = true,
+						sp = "#89b4fa", -- blue underline (catppuccin mocha)
+					},
+					-- Inactive tabs: slightly dimmed background
+					buffer_visible = { bg = "#1e1e2e" },
+					background       = { bg = "#1e1e2e" },
+				},
+			})
+		end,
+	},
+
+	-- Persistence: save and restore sessions (buffers survive restarts)
+	{
+		"folke/persistence.nvim",
+		event = "BufReadPre",
+		config = function()
+			require("persistence").setup({
+				dir = vim.fn.expand(vim.fn.stdpath("state") .. "/sessions/"),
 			})
 		end,
 	},
@@ -1541,10 +1466,10 @@ vim.keymap.set("n", "za", function()
 end, { desc = "Smart fold: toggle block at cursor { or enclosing block" })
 
 -- Tab management keybindings
-vim.keymap.set("n", "<leader>to", ":tabnew<CR>", { desc = "Open new tab" })
-vim.keymap.set("n", "<leader>tn", ":tabnext<CR>", { desc = "Next tab" })
-vim.keymap.set("n", "<leader>tp", ":tabprevious<CR>", { desc = "Previous tab" })
-vim.keymap.set("n", "<leader>tx", ":tabclose<CR>", { desc = "Close tab" })
+vim.keymap.set("n", "<leader>to", ":enew<CR>",                       { desc = "Open new buffer tab" })
+vim.keymap.set("n", "<leader>tn", ":BufferLineCycleNext<CR>",         { desc = "Next buffer tab" })
+vim.keymap.set("n", "<leader>tp", ":BufferLineCyclePrev<CR>",         { desc = "Prev buffer tab" })
+vim.keymap.set("n", "<leader>tx", ":bdelete<CR>",                     { desc = "Close buffer tab" })
 
 -- Window splitting keybindings
 vim.keymap.set("n", "<leader>sv", ":vsplit<CR>", { desc = "Split window vertically" })
@@ -1656,6 +1581,26 @@ vim.api.nvim_create_autocmd("TermOpen", {
 		vim.keymap.set("t", "jk", [[<C-\><C-n>]], { buffer = args.buf })
 	end,
 })
+
+-- Notes keybindings
+vim.fn.mkdir(vim.fn.expand("~/notes"), "p")
+vim.keymap.set("n", "<leader>nt", ":e ~/notes/todo.md<CR>",        { desc = "Open todo" })
+vim.keymap.set("n", "<leader>nb", ":e ~/notes/brainstorm.md<CR>",  { desc = "Open brainstorm" })
+vim.keymap.set("n", "<leader>nn", function()
+	vim.cmd(":e ~/notes/scratch-" .. os.date("%Y%m%d-%H%M%S") .. ".md")
+end, { desc = "New scratch note" })
+vim.keymap.set("n", "<leader>nf", ":Telescope find_files cwd=~/notes<CR>", { desc = "Find notes" })
+vim.keymap.set("n", "<leader>ng", ":Telescope live_grep cwd=~/notes<CR>",  { desc = "Grep notes" })
+
+-- Session keybindings (persistence.nvim)
+vim.keymap.set("n", "<leader>qs", function() require("persistence").load() end,            { desc = "Restore session" })
+vim.keymap.set("n", "<leader>ql", function() require("persistence").load({ last = true }) end, { desc = "Restore last session" })
+vim.keymap.set("n", "<leader>qd", function() require("persistence").stop() end,            { desc = "Don't save session on exit" })
+
+-- Bufferline keybindings
+vim.keymap.set("n", "<S-h>", ":BufferLineCyclePrev<CR>", { desc = "Prev buffer tab" })
+vim.keymap.set("n", "<S-l>", ":BufferLineCycleNext<CR>", { desc = "Next buffer tab" })
+vim.keymap.set("n", "<leader>bx", ":bdelete<CR>",        { desc = "Close buffer" })
 
 -- Neogit
 vim.keymap.set("n", "<leader>lg", function()
