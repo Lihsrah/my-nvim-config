@@ -1259,6 +1259,9 @@ require("lazy").setup({
 					show_close_icon = false,
 					diagnostics = "nvim_lsp",
 					indicator = { style = "underline" },
+					custom_filter = function(buf_number)
+						return vim.bo[buf_number].buftype ~= "terminal"
+					end,
 				},
 				highlights = {
 					-- Active tab: brighter background + colored underline, text unchanged
@@ -1575,10 +1578,11 @@ vim.keymap.set("i", "<A-k>", "<Esc>:m .-2<CR>==gi", { desc = "Move line up (inse
 vim.keymap.set("n", "<leader>tt", ":terminal<CR>")
 vim.keymap.set("n", "<leader>tv", ":botright vsplit | terminal<CR>")
 vim.keymap.set("n", "<leader>th", ":botright split | terminal<CR>")
--- jk exits terminal mode
+-- jk exits terminal mode; wipe buffer when window closes (removes from bufferline)
 vim.api.nvim_create_autocmd("TermOpen", {
 	callback = function(args)
 		vim.keymap.set("t", "jk", [[<C-\><C-n>]], { buffer = args.buf })
+		vim.bo[args.buf].bufhidden = "wipe"
 	end,
 })
 
