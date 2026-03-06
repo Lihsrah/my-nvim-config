@@ -796,6 +796,7 @@ require("lazy").setup({
 		},
 		config = function()
 			require("neogit").setup({
+				kind = "split",
 				integrations = {
 					diffview = true,
 					telescope = true,
@@ -1332,6 +1333,7 @@ vim.opt.tabstop = 2
 vim.opt.smartindent = true
 vim.opt.wrap = false
 vim.opt.termguicolors = true
+vim.opt.fileformat = "unix" -- write files with LF line endings to avoid ^M
 vim.opt.clipboard = "unnamedplus"
 vim.opt.ignorecase = true    -- search is case-insensitive by default
 vim.opt.smartcase = true     -- ...unless you type a capital letter, then it becomes case-sensitive
@@ -1340,6 +1342,15 @@ vim.opt.splitbelow = true    -- horizontal splits (:split) open below instead of
 vim.opt.splitright = true    -- vertical splits (:vsplit) open to the right instead of left
 vim.opt.undofile = true      -- save undo history to disk so you can undo even after closing a file
 vim.opt.updatetime = 250     -- milliseconds before CursorHold fires; speeds up LSP hover/diagnostics (default is 4000)
+
+-- Normalize pasted CRLF text (common from browsers) to LF so ^M is not inserted.
+local _original_paste = vim.paste
+vim.paste = function(lines, phase)
+    for i, line in ipairs(lines) do
+        lines[i] = line:gsub("\r$", "")
+    end
+    return _original_paste(lines, phase)
+end
 
 -- Disable mouse to prevent hover selection in completion menu
 vim.opt.mouse = ""
@@ -1444,6 +1455,27 @@ end
 
 vim.keymap.set("n", "e", fold_safe_motion("e", next_word_end_in_line),   { desc = "Word end (fold-aware)" })
 vim.keymap.set("n", "w", fold_safe_motion("w", next_word_start_in_line), { desc = "Word forward (fold-aware)" })
+
+-- CRLF-safe put: remove trailing \r from register lines before p/P.
+local function put_without_cr(after)
+    local reg = vim.v.register
+    if reg == "" then reg = '"' end
+
+    local regtype = vim.fn.getregtype(reg)
+    local lines = vim.fn.getreg(reg, 1, true)
+    if type(lines) ~= "table" then lines = { tostring(lines) } end
+
+    for i, line in ipairs(lines) do
+        lines[i] = line:gsub("\r$", "")
+    end
+
+    for _ = 1, vim.v.count1 do
+        vim.api.nvim_put(lines, regtype:sub(1, 1), after, true)
+    end
+end
+
+vim.keymap.set("n", "p", function() put_without_cr(true) end, { desc = "Put after (CRLF-safe)" })
+vim.keymap.set("n", "P", function() put_without_cr(false) end, { desc = "Put before (CRLF-safe)" })
 
 -- Smart fold: if { exists after cursor on current line → toggle that block's fold.
 -- Otherwise use [{ to jump to the enclosing opening brace and toggle that fold.
