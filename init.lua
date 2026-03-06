@@ -797,6 +797,10 @@ require("lazy").setup({
 		config = function()
 			require("neogit").setup({
 				kind = "split",
+				graph_style = "ascii",
+				status = {
+					recent_commit_count = 10,
+				},
 				integrations = {
 					diffview = true,
 					telescope = true,
