@@ -1604,7 +1604,7 @@ vim.keymap.set("n", "<leader>qd", function() require("persistence").stop() end, 
 -- Bufferline keybindings
 vim.keymap.set("n", "<S-h>", ":BufferLineCyclePrev<CR>", { desc = "Prev buffer tab" })
 vim.keymap.set("n", "<S-l>", ":BufferLineCycleNext<CR>", { desc = "Next buffer tab" })
-vim.keymap.set("n", "<leader>bx", ":bdelete<CR>",        { desc = "Close buffer" })
+vim.keymap.set("n", "<S-x>", ":bdelete<CR>",             { desc = "Close buffer" })
 
 -- Neogit
 vim.keymap.set("n", "<leader>lg", function()
