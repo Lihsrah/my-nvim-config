@@ -851,9 +851,7 @@ require("lazy").setup({
 			"nvim-tree/nvim-web-devicons",
 		},
 		config = function()
-			require("octo").setup({
-				gh_cmd = vim.fn.expand("~/.config/nvim/bin/gh-octo"),
-			})
+			require("octo").setup()
 		end,
 	},
 
