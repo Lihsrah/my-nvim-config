@@ -155,7 +155,7 @@ require("lazy").setup({
 				watch_for_changes = true,
 				keymaps = {
 					["g?"] = "actions.show_help",
-					["<CR>"] = "actions.select",
+					["<CR>"] = { "actions.select", opts = { tab = false } },
 					["<C-s>"] = "actions.select_vsplit",
 					["<C-h>"] = "actions.select_split",
 					["<C-t>"] = "actions.select_tab",
