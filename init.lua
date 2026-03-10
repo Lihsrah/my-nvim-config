@@ -796,7 +796,7 @@ require("lazy").setup({
 		},
 		config = function()
 			require("neogit").setup({
-				kind = "split",
+				kind = "replace",
 				graph_style = "ascii",
 				status = {
 					recent_commit_count = 10,
@@ -1261,6 +1261,7 @@ require("lazy").setup({
 					show_buffer_close_icons = true,
 					show_close_icon = false,
 					diagnostics = "nvim_lsp",
+				diagnostics_indicator = function() return "" end,
 					indicator = { style = "underline" },
 					custom_filter = function(buf_number)
 						return vim.bo[buf_number].buftype ~= "terminal"
