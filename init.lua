@@ -1233,6 +1233,7 @@ require("lazy").setup({
 					separator_style = "thick",
 					show_buffer_close_icons = true,
 					show_close_icon = false,
+				show_tab_indicators = false,
 					diagnostics = "nvim_lsp",
 				diagnostics_indicator = function() return "" end,
 					indicator = { style = "underline" },
@@ -1318,7 +1319,6 @@ vim.opt.splitbelow = true    -- horizontal splits (:split) open below instead of
 vim.opt.splitright = true    -- vertical splits (:vsplit) open to the right instead of left
 vim.opt.undofile = true      -- save undo history to disk so you can undo even after closing a file
 vim.opt.updatetime = 500     -- milliseconds before CursorHold fires; balance between responsiveness and CPU (default is 4000)
-vim.opt.showtabline = 0      -- hide native vim tabline (bufferline replaces it)
 
 -- Normalize pasted CRLF text (common from browsers) to LF so ^M is not inserted.
 local _original_paste = vim.paste
