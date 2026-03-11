@@ -155,19 +155,7 @@ require("lazy").setup({
 				watch_for_changes = false,
 				keymaps = {
 					["g?"] = "actions.show_help",
-					["<CR>"] = {
-					callback = function()
-						local pre_buf = vim.g._pre_oil_buf
-						vim.g._pre_oil_buf = nil
-						require("oil.actions").select.callback()
-						vim.schedule(function()
-							if pre_buf and vim.api.nvim_buf_is_valid(pre_buf)
-								and vim.api.nvim_get_current_buf() ~= pre_buf then
-								pcall(vim.api.nvim_buf_delete, pre_buf, { force = false })
-							end
-						end)
-					end,
-				},
+					["<CR>"] = { "actions.select", opts = { tab = false } },
 					["<C-s>"] = "actions.select_vsplit",
 					["<C-h>"] = "actions.select_split",
 					["<C-t>"] = "actions.select_tab",
@@ -476,6 +464,16 @@ require("lazy").setup({
 					},
 				}),
 			})
+		end,
+	},
+
+	-- Spectre: project-wide search and replace
+	{
+		"nvim-pack/nvim-spectre",
+		dependencies = { "nvim-lua/plenary.nvim" },
+		cmd = "Spectre",
+		config = function()
+			require("spectre").setup()
 		end,
 	},
 
@@ -1508,10 +1506,13 @@ vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Move to window below" })
 vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
 
 -- File explorer keybinding
-vim.keymap.set("n", "<leader>ee", function()
-	vim.g._pre_oil_buf = vim.api.nvim_get_current_buf()
-	vim.cmd("Oil")
-end, { desc = "Open file explorer" })
+vim.keymap.set("n", "<leader>ee", "<CMD>Oil<CR>", { desc = "Open file explorer" })
+
+-- Spectre keybindings
+vim.keymap.set("n", "<leader>S",  function() require("spectre").toggle() end,                              { desc = "Toggle Spectre" })
+vim.keymap.set("n", "<leader>sw", function() require("spectre").open_visual({ select_word = true }) end,   { desc = "Search current word" })
+vim.keymap.set("v", "<leader>sw", function() require("spectre").open_visual() end,                         { desc = "Search selection" })
+vim.keymap.set("n", "<leader>sf", function() require("spectre").open_file_search({ select_word = true }) end, { desc = "Search in current file" })
 
 -- Trouble keybindings for diagnostics
 vim.keymap.set("n", "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", { desc = "Diagnostics (Trouble)" })

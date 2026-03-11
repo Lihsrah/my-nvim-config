@@ -362,6 +362,19 @@ Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with th
 | `<leader>fd` | Normal | Document symbols |
 | `<leader>ft` | Normal | Color schemes with preview |
 
+### Spectre (Search & Replace)
+
+Project-wide search and replace with regex support.
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>S` | Normal | Toggle Spectre panel |
+| `<leader>sw` | Normal | Search word under cursor |
+| `<leader>sw` | Visual | Search selected text |
+| `<leader>sf` | Normal | Search & replace in current file only |
+
+**Inside Spectre:** `<CR>` confirm replace · `dd` exclude match · `R` replace all
+
 ### LSP (Language Server Protocol)
 
 | Shortcut | Mode | Description |
@@ -508,6 +521,9 @@ Format on save is enabled by default. Folds are preserved across saves.
 - [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) - Autocompletion
 - [LuaSnip](https://github.com/L3MON4D3/LuaSnip) - Snippet engine
 - [trouble.nvim](https://github.com/folke/trouble.nvim) - Diagnostics list
+
+### Search & Replace
+- [nvim-spectre](https://github.com/nvim-pack/nvim-spectre) - Project-wide search and replace
 
 ### Code Editing
 - [nvim-autopairs](https://github.com/windwp/nvim-autopairs) - Auto close brackets
