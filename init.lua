@@ -157,12 +157,15 @@ require("lazy").setup({
 					["g?"] = "actions.show_help",
 					["<CR>"] = {
 					callback = function()
-						local prev_buf = vim.api.nvim_get_current_buf()
+						local pre_buf = vim.g._pre_oil_buf
+						vim.g._pre_oil_buf = nil
 						require("oil.actions").select.callback()
-						local new_buf = vim.api.nvim_get_current_buf()
-						if new_buf ~= prev_buf and vim.api.nvim_buf_is_valid(prev_buf) then
-							vim.api.nvim_buf_delete(prev_buf, { force = false })
-						end
+						vim.schedule(function()
+							if pre_buf and vim.api.nvim_buf_is_valid(pre_buf)
+								and vim.api.nvim_get_current_buf() ~= pre_buf then
+								pcall(vim.api.nvim_buf_delete, pre_buf, { force = false })
+							end
+						end)
 					end,
 				},
 					["<C-s>"] = "actions.select_vsplit",
@@ -1505,7 +1508,10 @@ vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Move to window below" })
 vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
 
 -- File explorer keybinding
-vim.keymap.set("n", "<leader>ee", "<CMD>Oil<CR>", { desc = "Open file explorer" })
+vim.keymap.set("n", "<leader>ee", function()
+	vim.g._pre_oil_buf = vim.api.nvim_get_current_buf()
+	vim.cmd("Oil")
+end, { desc = "Open file explorer" })
 
 -- Trouble keybindings for diagnostics
 vim.keymap.set("n", "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", { desc = "Diagnostics (Trouble)" })
