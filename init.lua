@@ -152,7 +152,7 @@ require("lazy").setup({
 					autosave_changes = false,
 				},
 				constrain_cursor = "editable",
-				watch_for_changes = true,
+				watch_for_changes = false,
 				keymaps = {
 					["g?"] = "actions.show_help",
 					["<CR>"] = { "actions.select", opts = { tab = false } },
@@ -649,6 +649,10 @@ require("lazy").setup({
 				auto_install = true,
 				highlight = {
 					enable = true,
+					disable = function(_, buf)
+						return vim.api.nvim_buf_line_count(buf) > 10000
+							or (vim.fn.getfsize(vim.api.nvim_buf_get_name(buf)) > 1024 * 1024)
+					end,
 				},
 				indent = {
 					enable = true,
@@ -932,41 +936,10 @@ require("lazy").setup({
 				},
 			})
 
-			-- Format on save with fold preservation
-			local _saved_folds = {}
+			-- Format on save (async to avoid blocking UI)
 			vim.api.nvim_create_autocmd("BufWritePre", {
 				callback = function(args)
-					-- Save which lines have closed folds
-					local closed = {}
-					local lcount = vim.api.nvim_buf_line_count(args.buf)
-					local i = 1
-					while i <= lcount do
-						if vim.fn.foldclosed(i) == i then
-							table.insert(closed, i)
-							i = vim.fn.foldclosedend(i) + 1
-						else
-							i = i + 1
-						end
-					end
-					_saved_folds[args.buf] = closed
 					conform.format({ bufnr = args.buf, lsp_fallback = true, async = false, timeout_ms = 1000 })
-				end,
-			})
-
-			vim.api.nvim_create_autocmd("BufWritePost", {
-				callback = function(args)
-					local closed = _saved_folds[args.buf]
-					if closed and #closed > 0 then
-						vim.schedule(function()
-							local lcount = vim.api.nvim_buf_line_count(args.buf)
-							for _, lnum in ipairs(closed) do
-								if lnum <= lcount then
-									pcall(vim.cmd, lnum .. "foldclose")
-								end
-							end
-							_saved_folds[args.buf] = nil
-						end)
-					end
 				end,
 			})
 
@@ -1344,7 +1317,7 @@ vim.opt.scrolloff = 8        -- always keep 8 lines visible above/below the curs
 vim.opt.splitbelow = true    -- horizontal splits (:split) open below instead of above
 vim.opt.splitright = true    -- vertical splits (:vsplit) open to the right instead of left
 vim.opt.undofile = true      -- save undo history to disk so you can undo even after closing a file
-vim.opt.updatetime = 250     -- milliseconds before CursorHold fires; speeds up LSP hover/diagnostics (default is 4000)
+vim.opt.updatetime = 500     -- milliseconds before CursorHold fires; balance between responsiveness and CPU (default is 4000)
 
 -- Normalize pasted CRLF text (common from browsers) to LF so ^M is not inserted.
 local _original_paste = vim.paste
@@ -1717,67 +1690,12 @@ vim.keymap.set("n", "<leader>m8", function() nav_harpoon(8) end, { desc = "Harpo
 vim.keymap.set("n", "<leader>m9", function() nav_harpoon(9) end, { desc = "Harpoon file 9" })
 
 -- Enable line numbers in LSP Saga floating windows
-vim.api.nvim_create_autocmd("FileType", {
-	pattern = { "sagafinder", "sagaoutline", "lspsagafinder" },
-	callback = function()
-		vim.wo.number = true
-		vim.wo.relativenumber = true
-	end,
-})
-
-vim.api.nvim_create_autocmd("BufEnter", {
-	pattern = "*",
-	callback = function()
-		local bufname = vim.api.nvim_buf_get_name(0)
-		local filetype = vim.bo.filetype
-
-		-- Check for various LSP Saga buffer patterns
-		if
-			filetype == "sagafinder"
-			or filetype == "lspsagafinder"
-			or filetype == "sagaoutline"
-			or string.match(bufname, "lspsaga://")
-			or string.match(bufname, "Lspsaga")
-			or vim.api.nvim_win_get_config(0).relative ~= ""
-		then -- floating window
-			vim.wo.number = true
-			vim.wo.relativenumber = true
-		end
-	end,
-})
-
--- Alternative approach: Force line numbers in all floating windows
 vim.api.nvim_create_autocmd("WinEnter", {
-	pattern = "*",
 	callback = function()
-		local win_config = vim.api.nvim_win_get_config(0)
-		if win_config.relative ~= "" then -- This is a floating window
+		if vim.api.nvim_win_get_config(0).relative ~= "" then
 			vim.wo.number = true
 			vim.wo.relativenumber = true
 		end
-	end,
-})
-
--- Force line numbers in all new windows (catches LSP Saga popups)
-vim.api.nvim_create_autocmd("BufWinEnter", {
-	pattern = "*",
-	callback = function()
-		vim.schedule(function()
-			local win_config = vim.api.nvim_win_get_config(0)
-			if win_config.relative ~= "" then
-				vim.wo.number = true
-				vim.wo.relativenumber = true
-			end
-		end)
-	end,
-})
-
--- Hook into LSP Saga's window creation
-vim.api.nvim_create_autocmd("User", {
-	pattern = "LspsagaUpdateFloatWinOptions",
-	callback = function()
-		vim.wo.number = true
-		vim.wo.relativenumber = true
 	end,
 })
 
