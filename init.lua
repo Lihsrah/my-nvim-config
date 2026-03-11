@@ -155,7 +155,16 @@ require("lazy").setup({
 				watch_for_changes = false,
 				keymaps = {
 					["g?"] = "actions.show_help",
-					["<CR>"] = { "actions.select", opts = { tab = false } },
+					["<CR>"] = {
+					callback = function()
+						local prev_buf = vim.api.nvim_get_current_buf()
+						require("oil.actions").select.callback()
+						local new_buf = vim.api.nvim_get_current_buf()
+						if new_buf ~= prev_buf and vim.api.nvim_buf_is_valid(prev_buf) then
+							vim.api.nvim_buf_delete(prev_buf, { force = false })
+						end
+					end,
+				},
 					["<C-s>"] = "actions.select_vsplit",
 					["<C-h>"] = "actions.select_split",
 					["<C-t>"] = "actions.select_tab",
