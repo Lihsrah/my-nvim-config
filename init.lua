@@ -954,12 +954,6 @@ require("lazy").setup({
 				},
 			})
 
-			-- Format on save (async to avoid blocking UI)
-			vim.api.nvim_create_autocmd("BufWritePre", {
-				callback = function(args)
-					conform.format({ bufnr = args.buf, lsp_fallback = true, async = false, timeout_ms = 1000 })
-				end,
-			})
 
 			vim.keymap.set({ "n", "v" }, "<leader>fm", function()
 				conform.format({
