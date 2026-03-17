@@ -1468,7 +1468,7 @@ end
 
 vim.api.nvim_create_autocmd("BufEnter", {
     callback = function()
-        if vim.bo.buftype == "" then
+        if vim.bo.buftype == "" and vim.bo.modifiable then
             vim.keymap.set("n", "p", function() put_without_cr(true) end, { buffer = true, desc = "Put after (CRLF-safe)" })
             vim.keymap.set("n", "P", function() put_without_cr(false) end, { buffer = true, desc = "Put before (CRLF-safe)" })
         end
