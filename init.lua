@@ -155,10 +155,30 @@ require("lazy").setup({
 				watch_for_changes = false,
 				keymaps = {
 					["g?"] = "actions.show_help",
-					["<CR>"] = { "actions.select", opts = { tab = false } },
-					["<C-s>"] = "actions.select_vsplit",
-					["<C-h>"] = "actions.select_split",
-					["<C-t>"] = "actions.select_tab",
+					["<CR>"] = {
+						callback = function()
+							local pre_buf = vim.g._pre_oil_buf
+							require("oil.actions").select.callback()
+							vim.schedule(function()
+								local cur_buf = vim.api.nvim_get_current_buf()
+								-- Still in Oil = navigated into a folder, don't delete anything yet
+								if vim.bo[cur_buf].filetype == "oil" then return end
+								-- Opened a file — remove the previous buffer
+								vim.g._pre_oil_buf = nil
+								if pre_buf
+									and vim.api.nvim_buf_is_valid(pre_buf)
+									and cur_buf ~= pre_buf
+									and not vim.bo[pre_buf].modified
+									and #vim.fn.win_findbuf(pre_buf) == 0
+								then
+									pcall(vim.api.nvim_buf_delete, pre_buf, { force = false })
+								end
+							end)
+						end,
+					},
+					["<C-s>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_vsplit.callback() end },
+					["<C-h>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_split.callback() end },
+					["<C-t>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_tab.callback() end },
 					["<C-p>"] = "actions.preview",
 					["<C-c>"] = "actions.close",
 					["<C-l>"] = "actions.refresh",
@@ -688,7 +708,7 @@ require("lazy").setup({
 				defaults = {
 					prompt_prefix = "🔍 ",
 					selection_caret = "➤ ",
-					path_display = { "truncate" },
+					path_display = { "smart" },
 					vimgrep_arguments = {
 					"rg",
 					"--color=never",
@@ -740,8 +760,6 @@ require("lazy").setup({
 				},
 				pickers = {
 					find_files = {
-						theme = "dropdown",
-						previewer = false,
 						hidden = true,
 					},
 					live_grep = {
@@ -1474,28 +1492,48 @@ end
 vim.keymap.set("n", "p", function() put_without_cr(true) end, { desc = "Put after (CRLF-safe)" })
 vim.keymap.set("n", "P", function() put_without_cr(false) end, { desc = "Put before (CRLF-safe)" })
 
--- Smart fold: if { exists after cursor on current line → toggle that block's fold.
--- Otherwise use [{ to jump to the enclosing opening brace and toggle that fold.
+-- Smart fold: fold from { to its exact matching } using % matching (same as bracket jump).
+-- If no { on/after cursor, jump to enclosing { first.
 vim.keymap.set("n", "za", function()
 	local lnum = vim.fn.line(".")
-	local col = vim.fn.col(".") -- 1-indexed byte column
+	local col = vim.fn.col(".") -- 1-indexed
 	local line = vim.api.nvim_get_current_line()
 
-	-- Check if an opening brace exists at or after the cursor on this line
-	local rest = line:sub(col)
-	if not rest:find("{", 1, true) then
-		-- No { after cursor: jump to the enclosing block's opening {
-		vim.cmd("normal! [{")
-		lnum = vim.fn.line(".")
+	-- If already on a closed fold, open it and return
+	if vim.fn.foldclosed(lnum) ~= -1 then
+		vim.cmd("normal! zo")
+		return
 	end
 
-	-- Toggle the fold at the target line
-	if vim.fn.foldclosed(lnum) ~= -1 then
-		vim.cmd("normal! zo") -- already closed → open it
-	else
-		vim.cmd("normal! zc") -- open → close it
+	-- Find { on or after cursor on this line
+	local rest = line:sub(col)
+	local brace_offset = rest:find("{", 1, true)
+	if not brace_offset then
+		-- No { on this line: jump to enclosing {
+		vim.cmd("normal! [{")
+		lnum = vim.fn.line(".")
+		line = vim.api.nvim_get_current_line()
+		col = 1
+		brace_offset = line:find("{", 1, true)
+		if not brace_offset then return end
 	end
-end, { desc = "Smart fold: toggle block at cursor { or enclosing block" })
+
+	-- Move cursor to the { so % finds the exact matching }
+	local brace_col = col + brace_offset - 2 -- 0-indexed for nvim_win_set_cursor
+	vim.api.nvim_win_set_cursor(0, { lnum, brace_col })
+
+	-- Use % to jump to the matching }
+	vim.cmd("normal! %")
+	local end_lnum = vim.fn.line(".")
+
+	-- Restore cursor to the opening {
+	vim.api.nvim_win_set_cursor(0, { lnum, brace_col })
+
+	-- Create fold from { line to } line
+	if end_lnum > lnum then
+		vim.cmd(lnum .. "," .. end_lnum .. "fold")
+	end
+end, { desc = "Smart fold: toggle block using % matching" })
 
 -- Tab management keybindings
 vim.keymap.set("n", "<leader>to", ":enew<CR>",                       { desc = "Open new buffer tab" })
@@ -1516,7 +1554,10 @@ vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Move to window below" })
 vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
 
 -- File explorer keybinding
-vim.keymap.set("n", "<leader>ee", "<CMD>Oil<CR>", { desc = "Open file explorer" })
+vim.keymap.set("n", "<leader>ee", function()
+	vim.g._pre_oil_buf = vim.api.nvim_get_current_buf()
+	vim.cmd("Oil")
+end, { desc = "Open file explorer" })
 
 -- Spectre keybindings
 vim.keymap.set("n", "<leader>S",  function() require("spectre").toggle() end,                              { desc = "Toggle Spectre" })
