@@ -1451,31 +1451,29 @@ end
 vim.keymap.set("n", "e", fold_safe_motion("e", next_word_end_in_line),   { desc = "Word end (fold-aware)" })
 vim.keymap.set("n", "w", fold_safe_motion("w", next_word_start_in_line), { desc = "Word forward (fold-aware)" })
 
--- CRLF-safe put: remove trailing \r from register lines before p/P.
+-- CRLF-safe put: only active in normal file buffers so plugins like Neogit keep their p/P keys.
 local function put_without_cr(after)
-    if not vim.bo.modifiable then
-        vim.cmd("normal! " .. (after and "p" or "P"))
-        return
-    end
-
     local reg = vim.v.register
     if reg == "" then reg = '"' end
-
     local regtype = vim.fn.getregtype(reg)
     local lines = vim.fn.getreg(reg, 1, true)
     if type(lines) ~= "table" then lines = { tostring(lines) } end
-
     for i, line in ipairs(lines) do
         lines[i] = line:gsub("\r$", "")
     end
-
     for _ = 1, vim.v.count1 do
         vim.api.nvim_put(lines, regtype:sub(1, 1), after, true)
     end
 end
 
-vim.keymap.set("n", "p", function() put_without_cr(true) end, { desc = "Put after (CRLF-safe)" })
-vim.keymap.set("n", "P", function() put_without_cr(false) end, { desc = "Put before (CRLF-safe)" })
+vim.api.nvim_create_autocmd("BufEnter", {
+    callback = function()
+        if vim.bo.buftype == "" then
+            vim.keymap.set("n", "p", function() put_without_cr(true) end, { buffer = true, desc = "Put after (CRLF-safe)" })
+            vim.keymap.set("n", "P", function() put_without_cr(false) end, { buffer = true, desc = "Put before (CRLF-safe)" })
+        end
+    end,
+})
 
 -- Smart fold: fold from { to its exact matching } using % matching (same as bracket jump).
 -- If no { on/after cursor, jump to enclosing { first.
