@@ -1453,6 +1453,11 @@ vim.keymap.set("n", "w", fold_safe_motion("w", next_word_start_in_line), { desc 
 
 -- CRLF-safe put: remove trailing \r from register lines before p/P.
 local function put_without_cr(after)
+    if not vim.bo.modifiable then
+        vim.cmd("normal! " .. (after and "p" or "P"))
+        return
+    end
+
     local reg = vim.v.register
     if reg == "" then reg = '"' end
 
