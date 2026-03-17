@@ -155,30 +155,10 @@ require("lazy").setup({
 				watch_for_changes = false,
 				keymaps = {
 					["g?"] = "actions.show_help",
-					["<CR>"] = {
-						callback = function()
-							local pre_buf = vim.g._pre_oil_buf
-							require("oil.actions").select.callback()
-							vim.schedule(function()
-								local cur_buf = vim.api.nvim_get_current_buf()
-								-- Still in Oil = navigated into a folder, don't delete anything yet
-								if vim.bo[cur_buf].filetype == "oil" then return end
-								-- Opened a file — remove the previous buffer
-								vim.g._pre_oil_buf = nil
-								if pre_buf
-									and vim.api.nvim_buf_is_valid(pre_buf)
-									and cur_buf ~= pre_buf
-									and not vim.bo[pre_buf].modified
-									and #vim.fn.win_findbuf(pre_buf) == 0
-								then
-									pcall(vim.api.nvim_buf_delete, pre_buf, { force = false })
-								end
-							end)
-						end,
-					},
-					["<C-s>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_vsplit.callback() end },
-					["<C-h>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_split.callback() end },
-					["<C-t>"] = { callback = function() vim.g._pre_oil_buf = nil; require("oil.actions").select_tab.callback() end },
+					["<CR>"] = "actions.select",
+					["<C-s>"] = "actions.select_vsplit",
+					["<C-h>"] = "actions.select_split",
+					["<C-t>"] = "actions.select_tab",
 					["<C-p>"] = "actions.preview",
 					["<C-c>"] = "actions.close",
 					["<C-l>"] = "actions.refresh",
@@ -1555,7 +1535,11 @@ vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
 
 -- File explorer keybinding
 vim.keymap.set("n", "<leader>ee", function()
-	vim.g._pre_oil_buf = vim.api.nvim_get_current_buf()
+	local buf = vim.api.nvim_get_current_buf()
+	-- Only track normal file buffers (not Oil, terminal, etc.)
+	if vim.bo[buf].buftype == "" and vim.api.nvim_buf_get_name(buf) ~= "" then
+		vim.g._pre_oil_buf = buf
+	end
 	vim.cmd("Oil")
 end, { desc = "Open file explorer" })
 
@@ -1756,6 +1740,27 @@ vim.keymap.set("n", "<leader>m6", function() nav_harpoon(6) end, { desc = "Harpo
 vim.keymap.set("n", "<leader>m7", function() nav_harpoon(7) end, { desc = "Harpoon file 7" })
 vim.keymap.set("n", "<leader>m8", function() nav_harpoon(8) end, { desc = "Harpoon file 8" })
 vim.keymap.set("n", "<leader>m9", function() nav_harpoon(9) end, { desc = "Harpoon file 9" })
+
+-- When a real file is opened after using Oil, delete the buffer that was open before Oil.
+-- This prevents files from accumulating in bufferline when navigating via Oil.
+vim.api.nvim_create_autocmd("BufEnter", {
+	callback = function()
+		local pre = vim.g._pre_oil_buf
+		if not pre then return end
+		local cur = vim.api.nvim_get_current_buf()
+		-- Only act when we land on a normal file buffer (not Oil, terminal, quickfix, etc.)
+		if vim.bo[cur].buftype ~= "" then return end
+		if cur == pre then vim.g._pre_oil_buf = nil; return end
+		-- Delete the pre-Oil buffer if it has no unsaved changes and isn't visible anywhere
+		vim.g._pre_oil_buf = nil
+		if vim.api.nvim_buf_is_valid(pre)
+			and not vim.bo[pre].modified
+			and #vim.fn.win_findbuf(pre) == 0
+		then
+			pcall(vim.api.nvim_buf_delete, pre, { force = false })
+		end
+	end,
+})
 
 -- Enable line numbers in LSP Saga floating windows
 vim.api.nvim_create_autocmd("WinEnter", {
