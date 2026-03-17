@@ -708,7 +708,7 @@ require("lazy").setup({
 				defaults = {
 					prompt_prefix = "🔍 ",
 					selection_caret = "➤ ",
-					path_display = { "smart" },
+					path_display = { "absolute" },
 					vimgrep_arguments = {
 					"rg",
 					"--color=never",
@@ -735,14 +735,14 @@ require("lazy").setup({
 					layout_config = {
 						horizontal = {
 							prompt_position = "top",
-							preview_width = 0.55,
-							results_width = 0.8,
+							preview_width = 0.35,
+							results_width = 0.65,
 						},
 						vertical = {
 							mirror = false,
 						},
-						width = 0.87,
-						height = 0.80,
+						width = 0.97,
+						height = 0.90,
 						preview_cutoff = 120,
 					},
 					sorting_strategy = "ascending",
