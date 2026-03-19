@@ -262,7 +262,8 @@ Neogit opens as a buffer (Magit-style). Press `q` to close.
 | `P` | Open push popup |
 | `PP` | Push |
 | `f` | Open fetch popup |
-| `ff` | Fetch |
+| `ff` | Fetch current remote |
+| `fa` | Fetch all remotes (full sync with repo) |
 
 **Stash**
 
@@ -288,6 +289,24 @@ Neogit opens as a buffer (Magit-style). Press `q` to close.
 | `ri` | Interactive rebase |
 | `rr` | Continue rebase |
 | `ra` | Abort rebase |
+
+### Diffview (Side-by-side diffs & file history)
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>dv` | Normal | Diff working tree vs HEAD |
+| `<leader>db` | Normal | Diff vs a branch (prompts for branch name) |
+| `<leader>dh` | Normal | File history for current file |
+| `<leader>dH` | Normal | File history for whole repo |
+| `<leader>dc` | Normal | Close diffview |
+
+**Inside diffview:**
+
+| Key | Description |
+|-----|-------------|
+| `]c` / `[c` | Next / prev change |
+| `<Tab>` / `<S-Tab>` | Next / prev file in file panel |
+| `q` | Close |
 
 ### GitHub (Octo.nvim)
 

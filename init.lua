@@ -831,6 +831,32 @@ require("lazy").setup({
 		end,
 	},
 
+	-- Diffview - side-by-side diffs and file history
+	{
+		"sindrets/diffview.nvim",
+		dependencies = { "nvim-lua/plenary.nvim" },
+		cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewFileHistory", "DiffviewToggleFiles" },
+		config = function()
+			require("diffview").setup({
+				view = {
+					default = { layout = "diff2_horizontal" },
+					merge_tool = { layout = "diff3_horizontal" },
+				},
+				key_bindings = {
+					view = {
+						{ "n", "q", "<cmd>DiffviewClose<cr>", { desc = "Close diffview" } },
+					},
+					file_panel = {
+						{ "n", "q", "<cmd>DiffviewClose<cr>", { desc = "Close diffview" } },
+					},
+					file_history_panel = {
+						{ "n", "q", "<cmd>DiffviewClose<cr>", { desc = "Close diffview" } },
+					},
+				},
+			})
+		end,
+	},
+
 	-- Gitsigns - git status in the gutter and hunk operations
 	{
 		"lewis6991/gitsigns.nvim",
@@ -1632,9 +1658,18 @@ vim.keymap.set("i", "<A-k>", "<Esc>:m .-2<CR>==gi", { desc = "Move line up (inse
 
 
 -- Terminal open in split
-vim.keymap.set("n", "<leader>tt", ":terminal<CR>")
-vim.keymap.set("n", "<leader>tv", ":botright vsplit | terminal<CR>")
-vim.keymap.set("n", "<leader>th", ":botright split | terminal<CR>")
+local function open_terminal(cmd)
+	local dir = vim.fn.expand("%:p:h")
+	if dir == "" or not vim.fn.isdirectory(dir) then
+		dir = vim.fn.getcwd()
+	end
+	vim.cmd(cmd)
+	vim.fn.chansend(vim.b.terminal_job_id, "cd " .. vim.fn.shellescape(dir) .. "\n")
+end
+
+vim.keymap.set("n", "<leader>tt", function() open_terminal("terminal") end,              { desc = "Terminal (current dir)" })
+vim.keymap.set("n", "<leader>tv", function() open_terminal("botright vsplit | terminal") end, { desc = "Terminal vertical split (current dir)" })
+vim.keymap.set("n", "<leader>th", function() open_terminal("botright split | terminal") end,  { desc = "Terminal horizontal split (current dir)" })
 -- jk exits terminal mode; wipe buffer when window closes (removes from bufferline)
 vim.api.nvim_create_autocmd("TermOpen", {
 	callback = function(args)
@@ -1662,6 +1697,16 @@ vim.keymap.set("n", "<leader>qd", function() require("persistence").stop() end, 
 vim.keymap.set("n", "<S-h>", ":BufferLineCyclePrev<CR>", { desc = "Prev buffer tab" })
 vim.keymap.set("n", "<S-l>", ":BufferLineCycleNext<CR>", { desc = "Next buffer tab" })
 vim.keymap.set("n", "<S-x>", ":bdelete<CR>",             { desc = "Close buffer" })
+
+-- Diffview keybindings
+vim.keymap.set("n", "<leader>dv", "<cmd>DiffviewOpen<cr>",             { desc = "Diff working tree vs HEAD" })
+vim.keymap.set("n", "<leader>dh", "<cmd>DiffviewFileHistory %<cr>",    { desc = "File history (current file)" })
+vim.keymap.set("n", "<leader>dH", "<cmd>DiffviewFileHistory<cr>",      { desc = "File history (whole repo)" })
+vim.keymap.set("n", "<leader>dc", "<cmd>DiffviewClose<cr>",            { desc = "Close diffview" })
+vim.keymap.set("n", "<leader>db", function()
+	local branch = vim.fn.input("Compare with branch: ")
+	if branch ~= "" then vim.cmd("DiffviewOpen " .. branch) end
+end, { desc = "Diff vs branch" })
 
 -- Neogit
 vim.keymap.set("n", "<leader>lg", function()
