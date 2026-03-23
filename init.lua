@@ -1732,6 +1732,7 @@ vim.keymap.set("n", "<leader>gpC", "<cmd>Octo pr checkout<cr>", { desc = "Checko
 vim.keymap.set("n", "<leader>gpk", "<cmd>Octo pr checks<cr>", { desc = "PR checks / CI status" })
 vim.keymap.set("n", "<leader>gpr", "<cmd>Octo pr ready<cr>", { desc = "Mark PR as ready (convert from draft)" })
 vim.keymap.set("n", "<leader>gpx", "<cmd>Octo pr close<cr>", { desc = "Close PR" })
+vim.keymap.set("n", "<leader>gpb", "<cmd>!gh pr view --web<cr>", { desc = "Open PR in browser" })
 -- Issues
 vim.keymap.set("n", "<leader>gic", "<cmd>Octo issue create<cr>", { desc = "Create issue" })
 vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
