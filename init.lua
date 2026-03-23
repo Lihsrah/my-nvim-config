@@ -730,10 +730,12 @@ require("lazy").setup({
 					winblend = 0,
 					mappings = {
 						i = {
-							["<C-t>"] = false,
+							["<leader>o"] = "select_tab",
+							["<C-t>"] = "select_tab",
 						},
 						n = {
-							["<C-t>"] = false,
+							["<leader>o"] = "select_tab",
+							["<C-t>"] = "select_tab",
 						},
 					},
 				},
