@@ -1667,9 +1667,18 @@ local function open_terminal(cmd)
 	vim.fn.chansend(vim.b.terminal_job_id, "cd " .. vim.fn.shellescape(dir) .. "\n")
 end
 
-vim.keymap.set("n", "<leader>tt", function() open_terminal("terminal") end,              { desc = "Terminal (current dir)" })
-vim.keymap.set("n", "<leader>tv", function() open_terminal("botright vsplit | terminal") end, { desc = "Terminal vertical split (current dir)" })
-vim.keymap.set("n", "<leader>th", function() open_terminal("botright split | terminal") end,  { desc = "Terminal horizontal split (current dir)" })
+local function open_terminal_cwd(cmd)
+	local dir = vim.fn.getcwd()
+	vim.cmd(cmd)
+	vim.fn.chansend(vim.b.terminal_job_id, "cd " .. vim.fn.shellescape(dir) .. "\n")
+end
+
+vim.keymap.set("n", "<leader>tt",  function() open_terminal_cwd("terminal") end,                   { desc = "Terminal (nvim cwd)" })
+vim.keymap.set("n", "<leader>tv",  function() open_terminal_cwd("botright vsplit | terminal") end, { desc = "Terminal vertical split (nvim cwd)" })
+vim.keymap.set("n", "<leader>th",  function() open_terminal_cwd("botright split | terminal") end,  { desc = "Terminal horizontal split (nvim cwd)" })
+vim.keymap.set("n", "<leader>tct", function() open_terminal("terminal") end,                   { desc = "Terminal (current file dir)" })
+vim.keymap.set("n", "<leader>tcv", function() open_terminal("botright vsplit | terminal") end, { desc = "Terminal vertical split (current file dir)" })
+vim.keymap.set("n", "<leader>tch", function() open_terminal("botright split | terminal") end,  { desc = "Terminal horizontal split (current file dir)" })
 -- jk exits terminal mode; wipe buffer when window closes (removes from bufferline)
 vim.api.nvim_create_autocmd("TermOpen", {
 	callback = function(args)
