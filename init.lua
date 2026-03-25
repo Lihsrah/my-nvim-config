@@ -775,6 +775,12 @@ require("lazy").setup({
 		end,
 	},
 
+	-- Multiple cursors
+	{
+		"mg979/vim-visual-multi",
+		branch = "master",
+	},
+
 	-- Auto pairs for brackets, quotes, etc.
 	{
 		"windwp/nvim-autopairs",

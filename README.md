@@ -323,6 +323,7 @@ Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with th
 | `<leader>gpk` | Normal | PR checks / CI status |
 | `<leader>gpr` | Normal | Mark PR as ready (convert from draft) |
 | `<leader>gpx` | Normal | Close PR |
+| `<leader>gpb` | Normal | Open PR in browser |
 
 **Issues (`<leader>gi`)**
 
@@ -365,6 +366,7 @@ Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with th
 | `<C-s>` | Oil | Open in vertical split |
 | `<C-h>` | Oil | Open in horizontal split |
 | `<C-t>` | Oil | Open in new tab |
+| `<BS>` | Oil | Close Oil (return to previous file) |
 | `-` | Oil | Go to parent directory |
 | `g.` | Oil | Toggle hidden files |
 
@@ -466,6 +468,20 @@ Mini.ai enhances Neovim's built-in text objects (`a` = "around", `i` = "inside")
 - `viq` - Visually select inside any quote
 - `dab` - Delete around any bracket
 
+### Multiple Cursors (vim-visual-multi)
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<C-n>` | Normal | Select word under cursor / add next occurrence |
+| `<C-n>` | Visual | Select all occurrences of selection |
+| `<C-Up>` / `<C-Down>` | Normal | Add cursor above / below |
+| `n` / `N` | VM | Next / previous match |
+| `q` | VM | Skip current and go to next |
+| `Q` | VM | Remove current cursor |
+| `<Esc>` | VM | Exit multi-cursor mode |
+
+**Tip:** `<C-n>` then `A` selects all occurrences at once. Then type to replace them all.
+
 ### Delete / Cut
 
 By default `d`, `c`, `s`, `x` do **not** yank to clipboard (black hole register). Use `<leader>d` variants to cut (yank + delete).
@@ -545,6 +561,7 @@ Format on save is enabled by default. Folds are preserved across saves.
 - [nvim-spectre](https://github.com/nvim-pack/nvim-spectre) - Project-wide search and replace
 
 ### Code Editing
+- [vim-visual-multi](https://github.com/mg979/vim-visual-multi) - Multiple cursors
 - [nvim-autopairs](https://github.com/windwp/nvim-autopairs) - Auto close brackets
 - [conform.nvim](https://github.com/stevearc/conform.nvim) - Code formatting
 - [mini.surround](https://github.com/echasnovski/mini.surround) - Surround text objects
