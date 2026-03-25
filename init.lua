@@ -2,6 +2,10 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
+-- Disable accidental macro recording; use Q to record macros instead
+vim.keymap.set("n", "q", "<nop>")
+vim.keymap.set("n", "Q", "q")
+
 -- Bootstrap lazy.nvim plugin manager
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
