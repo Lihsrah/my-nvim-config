@@ -1725,9 +1725,27 @@ vim.keymap.set("n", "<leader>db", function()
 end, { desc = "Diff vs branch" })
 
 -- Neogit
+local function neogit_cwd()
+	local cwd = vim.fn.getcwd()
+	local result = vim.fn.systemlist("git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --show-toplevel")
+	if vim.v.shell_error == 0 then
+		return result[1]
+	end
+	local buf_dir = vim.fn.expand("%:p:h")
+	result = vim.fn.systemlist("git -C " .. vim.fn.shellescape(buf_dir) .. " rev-parse --show-toplevel")
+	if vim.v.shell_error == 0 then
+		return result[1]
+	end
+	return cwd
+end
+
 vim.keymap.set("n", "<leader>lg", function()
-	require("neogit").open({ cwd = vim.fn.expand("%:p:h") })
+	require("neogit").open({ cwd = neogit_cwd() })
 end, { desc = "Open Neogit" })
+
+vim.keymap.set("n", "<leader>lG", function()
+	require("neogit").open({ cwd = vim.fn.expand("%:p:h") })
+end, { desc = "Open Neogit (buffer dir)" })
 
 -- Octo (GitHub) keybindings
 -- PRs
