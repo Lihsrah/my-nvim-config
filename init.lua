@@ -251,6 +251,8 @@ require("lazy").setup({
 					"html",         -- HTML
 					"cssls",        -- CSS
 					"lua_ls",       -- Lua
+					"terraformls",  -- Terraform
+					"dockerls",     -- Dockerfile
 				},
 			})
 		end,
@@ -334,8 +336,24 @@ require("lazy").setup({
 				},
 			}
 
+			-- Terraform
+			vim.lsp.config.terraformls = {
+				cmd = { "terraform-ls", "serve" },
+				filetypes = { "terraform", "terraform-vars" },
+				root_markers = { ".terraform", ".git" },
+				capabilities = capabilities,
+			}
+
+			-- Dockerfile
+			vim.lsp.config.dockerls = {
+				cmd = { "docker-langserver", "--stdio" },
+				filetypes = { "dockerfile" },
+				root_markers = { "Dockerfile", ".git" },
+				capabilities = capabilities,
+			}
+
 			-- Enable LSP servers
-			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls" })
+			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls", "terraformls", "dockerls" })
 
 			-- LSP keybindings (replaced with LSP Saga enhanced versions)
 			vim.keymap.set("n", "gd", "<cmd>Lspsaga goto_definition<CR>", { desc = "Go to definition" })
@@ -659,6 +677,8 @@ require("lazy").setup({
 					"php",
 					"markdown",
 					"markdown_inline",
+					"terraform",
+					"dockerfile",
 				},
 				sync_install = false,
 				auto_install = true,
@@ -988,6 +1008,8 @@ require("lazy").setup({
 					c = { "clang-format" },
 					cpp = { "clang-format" },
 					php = { "php-cs-fixer" },
+					terraform = { "terraform_fmt" },
+					["terraform-vars"] = { "terraform_fmt" },
 				},
 			})
 
