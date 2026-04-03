@@ -253,6 +253,7 @@ require("lazy").setup({
 					"lua_ls",       -- Lua
 					"terraformls",  -- Terraform
 					"dockerls",     -- Dockerfile
+					"yamlls",       -- YAML
 				},
 			})
 		end,
@@ -336,6 +337,22 @@ require("lazy").setup({
 				},
 			}
 
+			-- YAML
+			vim.lsp.config.yamlls = {
+				cmd = { "yaml-language-server", "--stdio" },
+				filetypes = { "yaml", "yaml.docker-compose", "yaml.gitlab" },
+				root_markers = { ".git" },
+				capabilities = capabilities,
+				settings = {
+					yaml = {
+						schemaStore = { enable = true, url = "https://www.schemastore.org/api/json/catalog.json" },
+						validate = true,
+						complete = true,
+						hover = true,
+					},
+				},
+			}
+
 			-- Terraform
 			vim.lsp.config.terraformls = {
 				cmd = { "terraform-ls", "serve" },
@@ -353,7 +370,7 @@ require("lazy").setup({
 			}
 
 			-- Enable LSP servers
-			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls", "terraformls", "dockerls" })
+			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls", "terraformls", "dockerls", "yamlls" })
 
 			-- LSP keybindings (replaced with LSP Saga enhanced versions)
 			vim.keymap.set("n", "gd", "<cmd>Lspsaga goto_definition<CR>", { desc = "Go to definition" })
@@ -679,6 +696,7 @@ require("lazy").setup({
 					"markdown_inline",
 					"terraform",
 					"dockerfile",
+					"yaml",
 				},
 				sync_install = false,
 				auto_install = true,
@@ -1280,6 +1298,9 @@ require("lazy").setup({
 
 			require("ufo").setup({
 				provider_selector = function(bufnr, filetype, buftype)
+					if filetype == "yaml" then
+						return { "lsp", "indent" }
+					end
 					local has_ts = pcall(vim.treesitter.get_parser, bufnr)
 					if has_ts then
 						return function(bufnr)
@@ -1289,6 +1310,30 @@ require("lazy").setup({
 					end
 					return { "lsp", "indent" }
 				end,
+			})
+		end,
+	},
+
+	-- Indent guides
+	{
+		"lukas-reineke/indent-blankline.nvim",
+		main = "ibl",
+		event = { "BufReadPre", "BufNewFile" },
+		config = function()
+			local hooks = require("ibl.hooks")
+			hooks.register(hooks.type.HIGHLIGHT_SETUP, function()
+				vim.api.nvim_set_hl(0, "IblScope", { fg = "#89b4fa" })
+			end)
+			require("ibl").setup({
+				indent = {
+					char = "│",
+				},
+				scope = {
+					enabled = true,
+					show_start = false,
+					show_end = false,
+					highlight = { "IblScope" },
+				},
 			})
 		end,
 	},
@@ -1404,7 +1449,7 @@ end
 vim.opt.mouse = ""
 
 -- Folding configuration (nvim-ufo for VSCode-like folding)
-vim.opt.foldcolumn = "1" -- Show fold column
+vim.opt.foldcolumn = "0" -- Hide fold column (using indent-blankline instead)
 vim.opt.foldlevel = 99 -- Start with all folds open
 vim.opt.foldlevelstart = 99 -- Start with all folds open for new buffers
 vim.opt.foldenable = true -- Enable folding
@@ -1538,6 +1583,25 @@ vim.keymap.set("n", "za", function()
 	-- If already on a closed fold, open it and return
 	if vim.fn.foldclosed(lnum) ~= -1 then
 		vim.cmd("normal! zo")
+		return
+	end
+
+	-- YAML: fold by indentation
+	if vim.bo.filetype == "yaml" then
+		local indent = #line:match("^%s*")
+		local last = lnum
+		local total = vim.api.nvim_buf_line_count(0)
+		for i = lnum + 1, total do
+			local l = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
+			if l:match("^%s*$") or #l:match("^%s*") > indent then
+				last = i
+			else
+				break
+			end
+		end
+		if last > lnum then
+			vim.cmd(lnum .. "," .. last .. "fold")
+		end
 		return
 	end
 
