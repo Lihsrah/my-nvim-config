@@ -161,12 +161,14 @@ require("lazy").setup({
 					["g?"] = "actions.show_help",
 					["<CR>"] = "actions.select",
 					["<C-s>"] = "actions.select_vsplit",
-					["<C-h>"] = "actions.select_split",
+					["<C-x>"] = "actions.select_split",
+					["<C-h>"] = false,
 					["<C-t>"] = "actions.select_tab",
 					["<C-p>"] = "actions.preview",
 					["<C-c>"] = "actions.close",
 				["<BS>"] = "actions.close",
-					["<C-l>"] = "actions.refresh",
+					["<C-l>"] = false,
+					["<C-r>"] = "actions.refresh",
 					["-"] = "actions.parent",
 					["_"] = "actions.open_cwd",
 					["`"] = "actions.cd",
@@ -1813,6 +1815,15 @@ vim.keymap.set("n", "<leader>db", function()
 	local branch = vim.fn.input("Compare with branch: ")
 	if branch ~= "" then vim.cmd("DiffviewOpen " .. branch) end
 end, { desc = "Diff vs branch" })
+
+-- Toggle native diff between the windows in the current tab (compare two open files)
+vim.keymap.set("n", "<leader>dt", function()
+	if vim.wo.diff then
+		vim.cmd("windo diffoff")
+	else
+		vim.cmd("windo diffthis")
+	end
+end, { desc = "Toggle diff between split windows" })
 
 -- Neogit
 local function neogit_cwd()
