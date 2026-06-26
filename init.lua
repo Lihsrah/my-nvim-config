@@ -1444,6 +1444,7 @@ vim.keymap.set("n", "<leader>G", "<cmd>Gsm<cr>", { desc = "GCP Secret Manager br
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.signcolumn = "yes"
+vim.opt.cursorline = true    -- highlight the line the cursor is on
 vim.opt.expandtab = true
 vim.opt.shiftwidth = 2
 vim.opt.tabstop = 2
