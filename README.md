@@ -13,6 +13,7 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - **Neogit** git interface (Magit-style, with diffview)
 - **Octo.nvim** GitHub integration (PRs, issues, reviews — no browser needed)
 - **kubectl.nvim** interactive Kubernetes cluster manager
+- **gcp.nvim** (local module) — GCP Artifact Registry image/vuln browser + Secret Manager
 - **Markdown** support with preview and tables
 - **Flash.nvim** for enhanced motion
 - **Conform.nvim** for code formatting (folds preserved on save)
@@ -404,6 +405,39 @@ Interactive cluster manager. Uses your current `~/.kube/config` context. Ships a
 **Commands:** `:Kubectl` (run/view, e.g. `:Kubectl get endpoints`), `:Kubens` (switch namespace), `:Kubectx` (switch context).
 
 > Requires the `kubectl` CLI installed and a valid kubeconfig. The view always reflects your active context — switch it with `:Kubectx`.
+
+### GCP — Artifact Registry & Secret Manager (gcp.nvim)
+
+A small **local module** (`lua/gcp/`) that drives the `gcloud` CLI. Every action starts by letting you **switch GCP project**, so it works across projects without `gcloud config set`. Requires `gcloud` installed + authenticated. For image vulnerabilities, the project must have **Artifact Analysis / Container Scanning** enabled.
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>K` | Normal | Artifact Registry browser (`:Gar`) — pick project → repo → images |
+| `<leader>G` | Normal | Secret Manager browser (`:Gsm`) — pick project → secrets → versions |
+
+**Artifact Registry flow:** pick a project → pick a Docker repo → image table. The table shows `IMAGE:TAG`, short digest, created time, and a **vulnerability column** that fills in lazily (`C:`/`H:`/`M:`/`L:` counts, `clean`, or `—` if unscanned). Sorted by version tag by default.
+
+| Key (image table) | Description |
+|-----|-------------|
+| `<CR>` | Show the image's CVEs (severity, CVE id, package, affected → fixed, CVSS) |
+| `st` / `sc` / `sv` | Sort by version / created / vulnerability severity |
+| `r` | Refresh · `gr` repos · `gp` projects |
+| `y` | Yank the full `image@sha256:…` ref |
+| `q` | Close |
+
+**Secret Manager flow:** pick a project → secret table → `<CR>` for versions → `<CR>` to reveal a value.
+
+| Key (secrets / versions) | Description |
+|-----|-------------|
+| `<CR>` | Secrets: open versions · Versions: reveal value |
+| `a` | Add a **new secret** (prompts for name, then a compose buffer for the value) |
+| `u` | Add a **new version** to the secret under cursor (update its value) |
+| `r` / `gp` | Refresh · switch project |
+| `b` | (versions view) back to secrets · `q` close |
+
+When adding/updating, a scratch **compose buffer** opens — type the value (multi-line ok) and submit with `<C-s>` or `:w` (`q` cancels). Revealed secret values open in an **in-memory buffer** (no swap, wiped on close); press `y` to copy to clipboard.
+
+> Commands: `:Gar`, `:Gsm`, `:GarRepos`. Requires the `gcloud` CLI authenticated (`gcloud auth login`). Secret values are sensitive — they are never written to disk by this module, but `y` copies to your system clipboard.
 
 ### Line Movement
 

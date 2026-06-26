@@ -117,6 +117,8 @@ require("lazy").setup({
 				{ "<leader>x",  group = "diagnostics (trouble)" },
 				{ "<leader>c",  group = "code" },
 				{ "<leader>k",  desc = "kubectl (kubernetes)" },
+				{ "<leader>K",  desc = "GCP artifact registry" },
+				{ "<leader>G",  desc = "GCP secret manager" },
 			})
 		end,
 	},
@@ -1432,6 +1434,11 @@ require("lazy").setup({
 		end,
 	},
 })
+
+-- gcp.nvim: local module — GCP Artifact Registry + Secret Manager browser
+require("gcp").setup()
+vim.keymap.set("n", "<leader>K", "<cmd>Gar<cr>", { desc = "GCP Artifact Registry browser" })
+vim.keymap.set("n", "<leader>G", "<cmd>Gsm<cr>", { desc = "GCP Secret Manager browser" })
 
 -- Basic Neovim settings
 vim.opt.number = true
