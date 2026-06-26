@@ -172,6 +172,7 @@ end
 -- Returns (display_text, highlight_group) for an entry's vuln state.
 local function vuln_cell(entry)
 	local v = entry.vuln
+	local stale = entry.stale and " (stale)" or ""
 	if v == nil then
 		return "scanning…", "Comment"
 	end
@@ -179,7 +180,7 @@ local function vuln_cell(entry)
 		return "—", "Comment"
 	end
 	if v.total == 0 then
-		return "clean", "DiagnosticOk"
+		return "clean" .. stale, "DiagnosticOk"
 	end
 	local parts = {}
 	if v.critical > 0 then table.insert(parts, "C:" .. v.critical) end
@@ -188,7 +189,7 @@ local function vuln_cell(entry)
 	if v.low > 0 then table.insert(parts, "L:" .. v.low) end
 	local hl = (v.critical > 0 or v.high > 0) and "DiagnosticError"
 		or (v.medium > 0 and "DiagnosticWarn" or "DiagnosticHint")
-	return table.concat(parts, " "), hl
+	return table.concat(parts, " ") .. stale, hl
 end
 
 ----------------------------------------------------------------------
@@ -264,6 +265,75 @@ local function render_images()
 			hl_group = info.hl,
 		})
 	end
+end
+
+-- Bump a severity into a counts table.
+local function add_sev(c, sev, n)
+	sev = tostring(sev):upper()
+	n = n or 1
+	if sev == "CRITICAL" then c.critical = c.critical + n
+	elseif sev == "HIGH" then c.high = c.high + n
+	elseif sev == "MEDIUM" then c.medium = c.medium + n
+	elseif sev == "LOW" then c.low = c.low + n
+	else return false end
+	c.total = c.total + n
+	return true
+end
+
+-- From a `list --show-occurrences` image object, derive vuln COUNTS + a stale flag in one pass.
+-- Defensive across gcloud output shapes: counts either from embedded VULNERABILITY occurrences
+-- (objects carrying a `vulnerability` table) or from a severity→number summary map. Stale comes
+-- from a DISCOVERY occurrence whose continuous-analysis state is INACTIVE.
+local function summarize_image(im)
+	local c = { critical = 0, high = 0, medium = 0, low = 0, total = 0 }
+	local from_occ, from_sum, scanned, stale = false, false, false, false
+	local sum = { critical = 0, high = 0, medium = 0, low = 0, total = 0 }
+
+	local function walk(v, depth)
+		if type(v) ~= "table" or depth > 7 then
+			return
+		end
+		-- a full vulnerability occurrence
+		if type(v.vulnerability) == "table" then
+			if add_sev(c, v.vulnerability.effectiveSeverity or v.vulnerability.severity or "?") then
+				from_occ = true
+			end
+		end
+		-- discovery occurrence → scanned + stale signal
+		local ca = v.continuousAnalysis or (type(v.discovery) == "table" and v.discovery.continuousAnalysis)
+		if ca then
+			scanned = true
+			if tostring(ca):upper() == "INACTIVE" then
+				stale = true
+			end
+		end
+		if tostring(v.kind or ""):upper() == "DISCOVERY" then
+			scanned = true
+		end
+		-- a severity→count summary map (e.g. { CRITICAL = 2, HIGH = 5 })
+		for _, k in ipairs({ "CRITICAL", "HIGH", "MEDIUM", "LOW" }) do
+			if type(v[k]) == "number" then
+				add_sev(sum, k, v[k])
+				from_sum = true
+			end
+		end
+		for _, child in pairs(v) do
+			walk(child, depth + 1)
+		end
+	end
+	walk(im, 0)
+
+	local counts
+	if from_occ then
+		counts = c
+	elseif from_sum then
+		counts = sum
+	elseif scanned then
+		counts = { critical = 0, high = 0, medium = 0, low = 0, total = 0 } -- scanned, clean
+	else
+		counts = nil -- no occurrence data found for this image
+	end
+	return counts, stale
 end
 
 -- Normalise the `describe --show-package-vulnerability` payload into a flat occurrence list.
@@ -391,17 +461,26 @@ function M.open_images()
 
 	notify("loading images (newest " .. M.state.limit .. ")…")
 	gcloud_json(
-		-- scoped to the chosen package, newest-first + capped, so it stays fast
+		-- ONE bulk call: list + per-image vuln/discovery occurrence SUMMARIES (what the console does),
+		-- newest-first + capped. --show-occurrences-from must cover the whole page or older rows get none.
 		{ "artifacts", "docker", "images", "list", img_path, "--include-tags",
-			"--sort-by=~UPDATE_TIME", "--limit=" .. M.state.limit, "--project=" .. M.state.project },
+			"--sort-by=~UPDATE_TIME", "--limit=" .. M.state.limit,
+			"--show-occurrences", "--show-occurrences-from=" .. M.state.limit,
+			'--occurrence-filter=kind="VULNERABILITY" OR kind="DISCOVERY"',
+			"--project=" .. M.state.project },
 		function(ok, data, err)
 			if not ok then
 				notify("images list failed: " .. err, vim.log.levels.ERROR)
 				return
 			end
 			local entries = {}
+			local any_vuln_data = false
 			for _, im in ipairs(data or {}) do
 				local tags = normalize_tags(im.tags)
+				local counts, stale = summarize_image(im)
+				if counts ~= nil then
+					any_vuln_data = true
+				end
 				table.insert(entries, {
 					package = im.package,
 					version = im.version, -- sha256:...
@@ -411,7 +490,8 @@ function M.open_images()
 					_img = (im.package or ""):match("/([^/]+)$") or im.package,
 					_tag = best_tag(tags),
 					_digest = (im.version or ""):gsub("^sha256:", ""),
-					vuln = nil,
+					vuln = counts, -- nil only if the bulk call carried no occurrence data
+					stale = stale,
 				})
 			end
 			M.state.images = entries
@@ -419,7 +499,11 @@ function M.open_images()
 			M.state.maybe_more = (#entries >= M.state.limit)
 			vim.schedule(function()
 				render_images()
-				start_vuln_scan()
+				-- Fallback: only if the bulk summaries carried nothing (output shape differs),
+				-- fill counts the slow per-image way so the column still populates.
+				if not any_vuln_data then
+					start_vuln_scan()
+				end
 			end)
 		end
 	)
