@@ -521,6 +521,57 @@ function M.pick_repo()
 	end)
 end
 
+-- Present the package picker (or skip it when there's exactly one).
+local function choose_package(repo, pkgs)
+	table.sort(pkgs, function(a, b)
+		return a.name < b.name
+	end)
+	if #pkgs == 1 then
+		M.state.package = pkgs[1] -- only one image — skip the picker
+		return M.open_images()
+	end
+	select_one("Images in " .. repo.name, pkgs, function(p)
+		return p.name
+	end, function(p)
+		M.state.package = p
+		M.open_images()
+	end)
+end
+
+-- Fallback: derive the distinct package (image) names from the actual image listing.
+-- Used when `packages list` returns nothing (version/permission quirks).
+local function derive_packages_from_images(repo)
+	notify("packages API returned none — deriving from images…", vim.log.levels.WARN)
+	gcloud_json(
+		{ "artifacts", "docker", "images", "list", repo.path, "--limit=1000", "--project=" .. M.state.project },
+		function(ok, data, err)
+			if not ok then
+				notify("could not derive packages: " .. err, vim.log.levels.ERROR)
+				return
+			end
+			local pkgs, seen = {}, {}
+			local prefix = repo.path .. "/"
+			for _, im in ipairs(data or {}) do
+				local pkgpath = im.package or ""
+				if pkgpath:sub(1, #prefix) == prefix then
+					local short = pkgpath:sub(#prefix + 1)
+					if short ~= "" and not seen[short] then
+						seen[short] = true
+						table.insert(pkgs, { name = short, path = pkgpath })
+					end
+				end
+			end
+			vim.schedule(function()
+				if #pkgs == 0 then
+					notify("no images found in repo " .. repo.name, vim.log.levels.WARN)
+					return
+				end
+				choose_package(repo, pkgs)
+			end)
+		end
+	)
+end
+
 -- A repo holds many packages (image names); pick one, then list its images (tags/digests).
 function M.pick_package()
 	if not M.state.repo then
@@ -536,26 +587,23 @@ function M.pick_package()
 				notify("packages list failed: " .. err, vim.log.levels.ERROR)
 				return
 			end
-			local pkgs = {}
+			local pkgs, seen = {}, {}
 			for _, p in ipairs(data or {}) do
 				-- name: projects/P/locations/L/repositories/R/packages/IMAGE  (IMAGE may be %2F-encoded if nested)
-				local short = (p.name or ""):match("/packages/(.+)$")
-				if short then
+				local short = (p.name or ""):match("/packages/(.+)$") or p.name
+				if short and short ~= "" then
 					short = short:gsub("%%2F", "/")
-					table.insert(pkgs, { name = short, path = repo.path .. "/" .. short })
+					if not seen[short] then
+						seen[short] = true
+						table.insert(pkgs, { name = short, path = repo.path .. "/" .. short })
+					end
 				end
 			end
 			vim.schedule(function()
-				if #pkgs == 1 then
-					M.state.package = pkgs[1] -- only one image — skip the picker
-					return M.open_images()
+				if #pkgs == 0 then
+					return derive_packages_from_images(repo)
 				end
-				select_one("Images in " .. repo.name, pkgs, function(p)
-					return p.name
-				end, function(p)
-					M.state.package = p
-					M.open_images()
-				end)
+				choose_package(repo, pkgs)
 			end)
 		end
 	)
