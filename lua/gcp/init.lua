@@ -8,12 +8,12 @@
 --   Image table keys: v check vuln count (this row) · <CR> full CVE details · st/sc sort
 --                     ] more · [ fewer · r refresh · gk packages · gr repos · gp projects · y yank · q quit
 --   (fetches newest-first, capped at state.limit; tune via setup({ image_limit=…, page_size=… }))
---   Vuln detail keys: q close
+--   Vuln detail keys: q/b back to images table
 --
 -- :Gsm  → pick project → secret table → <CR> versions → <CR> reveal value
 --   Secrets keys:  <CR> versions · a add secret · u new version · r refresh · gp projects · q quit
---   Versions keys: <CR> reveal value · u new version · b back · q quit
---   Reveal keys:   y yank value · q close  (buffer is in-memory only, no swap)
+--   Versions keys: <CR> reveal value · u new version · b/q back to secrets
+--   Reveal keys:   y yank value · q/b back to versions  (buffer is in-memory only, no swap)
 
 local M = {}
 
@@ -325,10 +325,14 @@ function M.open_images()
 		return M.pick_package()
 	end
 	local img_path = M.state.package.path -- loc-docker.pkg.dev/proj/repo/image
+	-- drop any previous table buffer so we don't accumulate hidden ones
+	if M.img_buf and vim.api.nvim_buf_is_valid(M.img_buf) then
+		pcall(vim.api.nvim_buf_delete, M.img_buf, { force = true })
+	end
 	local buf = vim.api.nvim_create_buf(false, true)
 	M.img_buf = buf
 	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].bufhidden = "hide" -- keep alive when drilling into vuln detail so we can come back
 	vim.bo[buf].filetype = "gar-images"
 	pcall(vim.api.nvim_buf_set_name, buf, "gar://" .. img_path)
 	vim.api.nvim_set_current_buf(buf)
@@ -444,7 +448,7 @@ function M.render_vuln_detail(entry, occurrences)
 	local lines = {
 		"  Vulnerabilities — " .. (entry._img or "") .. ":" .. (entry._tag or ""),
 		"  " .. (entry.ref or ""),
-		"  q close · sorted by severity · total: " .. #rows,
+		"  q/b back to images · sorted by severity · total: " .. #rows,
 		"  " .. string.rep("─", 96),
 		string.format(DETAIL_FMT, "SEVERITY", "CVE", "PACKAGE", "AFFECTED", "FIXED", "CVSS"),
 	}
@@ -474,9 +478,16 @@ function M.render_vuln_detail(entry, occurrences)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.bo[buf].modifiable = false
 	vim.api.nvim_set_current_buf(buf)
-	vim.keymap.set("n", "q", function()
-		vim.api.nvim_buf_delete(buf, { force = true })
-	end, { buffer = buf, nowait = true, silent = true })
+	local function back()
+		if M.img_buf and vim.api.nvim_buf_is_valid(M.img_buf) then
+			vim.api.nvim_set_current_buf(M.img_buf)
+		end
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.api.nvim_buf_delete(buf, { force = true })
+		end
+	end
+	vim.keymap.set("n", "q", back, { buffer = buf, nowait = true, silent = true })
+	vim.keymap.set("n", "b", back, { buffer = buf, nowait = true, silent = true })
 	for ln, hl in pairs(hl_lines) do
 		vim.api.nvim_buf_set_extmark(buf, ns, ln - 1, 2, { end_row = ln - 1, end_col = 11, hl_group = hl })
 	end
@@ -762,7 +773,7 @@ function M.gsm_reveal(secret, version)
 				vim.bo[buf].swapfile = false
 				local lines = {
 					"  ⚠ SECRET VALUE — " .. secret._name .. " (version " .. version .. ")",
-					"  y yank value · q close · in-memory only, not written to disk",
+					"  y yank value · q/b back to versions · in-memory only, not written to disk",
 					"  " .. string.rep("─", 70),
 					"",
 				}
@@ -770,9 +781,16 @@ function M.gsm_reveal(secret, version)
 				vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 				vim.bo[buf].modifiable = false
 				vim.api.nvim_set_current_buf(buf)
-				vim.keymap.set("n", "q", function()
-					vim.api.nvim_buf_delete(buf, { force = true })
-				end, { buffer = buf, nowait = true })
+				local function back()
+					if M.ver_buf and vim.api.nvim_buf_is_valid(M.ver_buf) then
+						vim.api.nvim_set_current_buf(M.ver_buf)
+					end
+					if vim.api.nvim_buf_is_valid(buf) then
+						vim.api.nvim_buf_delete(buf, { force = true })
+					end
+				end
+				vim.keymap.set("n", "q", back, { buffer = buf, nowait = true })
+				vim.keymap.set("n", "b", back, { buffer = buf, nowait = true })
 				vim.keymap.set("n", "y", function()
 					vim.fn.setreg("+", out)
 					notify("secret value yanked to clipboard")
@@ -835,13 +853,17 @@ function M.gsm_open_versions(secret)
 			return
 		end
 		vim.schedule(function()
+			if M.ver_buf and vim.api.nvim_buf_is_valid(M.ver_buf) then
+				pcall(vim.api.nvim_buf_delete, M.ver_buf, { force = true })
+			end
 			local buf = vim.api.nvim_create_buf(false, true)
+			M.ver_buf = buf
 			vim.bo[buf].buftype = "nofile"
-			vim.bo[buf].bufhidden = "wipe"
+			vim.bo[buf].bufhidden = "hide" -- keep alive when revealing a value
 			vim.bo[buf].filetype = "gsm-versions"
 			local lines = {
 				"  Secret versions — " .. secret._name,
-				"  <CR> reveal value · u new version · b back · q quit",
+				"  <CR> reveal value · u new version · b/q back to secrets",
 				"",
 				string.format(VER_FMT, "VERSION", "STATE", "CREATED"),
 				"  " .. string.rep("─", 60),
@@ -859,6 +881,16 @@ function M.gsm_open_versions(secret)
 			local function under()
 				return rowmap[vim.api.nvim_win_get_cursor(0)[1]]
 			end
+			local function back()
+				if M.sec_buf and vim.api.nvim_buf_is_valid(M.sec_buf) then
+					vim.api.nvim_set_current_buf(M.sec_buf) -- reuse cached secrets table
+				else
+					M.gsm_open_secrets()
+				end
+				if vim.api.nvim_buf_is_valid(buf) then
+					vim.api.nvim_buf_delete(buf, { force = true })
+				end
+			end
 			vim.keymap.set("n", "<CR>", function()
 				local n = under()
 				if n then
@@ -868,12 +900,8 @@ function M.gsm_open_versions(secret)
 			vim.keymap.set("n", "u", function()
 				M.gsm_add_version(secret)
 			end, { buffer = buf, nowait = true })
-			vim.keymap.set("n", "b", function()
-				M.gsm_open_secrets()
-			end, { buffer = buf, nowait = true })
-			vim.keymap.set("n", "q", function()
-				vim.api.nvim_buf_delete(buf, { force = true })
-			end, { buffer = buf, nowait = true })
+			vim.keymap.set("n", "b", back, { buffer = buf, nowait = true })
+			vim.keymap.set("n", "q", back, { buffer = buf, nowait = true })
 		end)
 	end)
 end
@@ -904,7 +932,7 @@ function M.gsm_open_secrets()
 				buf = vim.api.nvim_create_buf(false, true)
 				M.sec_buf = buf
 				vim.bo[buf].buftype = "nofile"
-				vim.bo[buf].bufhidden = "wipe"
+				vim.bo[buf].bufhidden = "hide" -- keep alive when drilling into versions
 				vim.bo[buf].filetype = "gsm-secrets"
 				local function under()
 					return M.sec_rowmap and M.sec_rowmap[vim.api.nvim_win_get_cursor(0)[1]]

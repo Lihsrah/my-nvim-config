@@ -422,7 +422,7 @@ To stay fast, it fetches the **newest N images** (default 50) for the package ra
 | Key (image table) | Description |
 |-----|-------------|
 | `v` | Check this image's vuln count (on demand) — shows in the table |
-| `<CR>` | Show the image's CVEs (severity, CVE id, package, affected → fixed, CVSS) |
+| `<CR>` | Show the image's CVEs (severity, CVE id, package, affected → fixed, CVSS) — `q`/`b` returns to the table |
 | `st` / `sc` | Sort by version / created |
 | `]` / `[` | Load more / fewer images (raise/lower the fetch limit) |
 | `gk` / `gr` / `gp` | Back to packages / repos / projects |
@@ -438,9 +438,9 @@ To stay fast, it fetches the **newest N images** (default 50) for the package ra
 | `a` | Add a **new secret** (prompts for name, then a compose buffer for the value) |
 | `u` | Add a **new version** to the secret under cursor (update its value) |
 | `r` / `gp` | Refresh · switch project |
-| `b` | (versions view) back to secrets · `q` close |
+| `b` / `q` | Go back one level (reveal → versions → secrets), reusing the cached table |
 
-When adding/updating, a scratch **compose buffer** opens — type the value (multi-line ok) and submit with `<C-s>` or `:w` (`q` cancels). Revealed secret values open in an **in-memory buffer** (no swap, wiped on close); press `y` to copy to clipboard.
+When adding/updating, a scratch **compose buffer** opens — type the value (multi-line ok) and submit with `<C-s>` or `:w` (`q` cancels). Revealed secret values open in an **in-memory buffer** (no swap, wiped on close); press `y` to copy to clipboard, `q`/`b` to return to the versions list.
 
 > Commands: `:Gar`, `:Gsm`, `:GarRepos`. Requires the `gcloud` CLI authenticated (`gcloud auth login`). Secret values are sensitive — they are never written to disk by this module, but `y` copies to your system clipboard.
 
