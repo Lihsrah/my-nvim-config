@@ -415,7 +415,7 @@ A small **local module** (`lua/gcp/`) that drives the `gcloud` CLI. Every action
 | `<leader>K` | Normal | Artifact Registry browser (`:Gar`) — pick project → repo → images |
 | `<leader>G` | Normal | Secret Manager browser (`:Gsm`) — pick project → secrets → versions |
 
-**Artifact Registry flow:** pick a project → pick a Docker repo → pick a **package** (image name) → image table. This follows Artifact Registry's real hierarchy (`repo → package → versions`), so you scope to one image instead of every image in the repo. (If a repo has only one package, the picker is skipped.) The table shows `IMAGE:TAG`, short digest, created time, and a **vulnerability column** that fills in lazily (`C:`/`H:`/`M:`/`L:` counts, `clean`, or `—` if unscanned). Sorted by version tag by default.
+**Artifact Registry flow:** pick a project → pick a Docker repo → pick a **package** (image name) → image table. This follows Artifact Registry's real hierarchy (`repo → package → versions`), so you scope to one image instead of every image in the repo. (If a repo has only one package, the picker is skipped.) The table shows the full **tag(s)** (column sizes to fit — no truncation), short digest, created time, and a **vulnerability column** that fills in lazily (`C:`/`H:`/`M:`/`L:` counts, `clean`, or `—` if unscanned). Sorted by version tag by default.
 
 To stay fast, it fetches the **newest N images** (default 50) for the package rather than everything, and the header shows `showing N (newest first) · more available`. Use `]` / `[` to load more / fewer. Tune the default with `require("gcp").setup({ image_limit = 50, page_size = 50 })`.
 
