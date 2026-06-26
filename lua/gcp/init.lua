@@ -3,9 +3,10 @@
 -- Backed entirely by the `gcloud` CLI. Requires `gcloud` installed + authenticated.
 -- For Artifact Registry vuln data, Artifact Analysis / Container Scanning must be enabled.
 --
--- :Gar  → pick project → pick docker repo → image table (lazy vuln counts) → <CR> CVE detail
---   Image table keys: <CR> vulns · st/sc/sv sort (version/created/vuln) · r refresh
---                     gr repos · gp projects · y yank ref · q quit
+-- :Gar  → pick project → pick repo → pick package (image) → image table → <CR> CVE detail
+--   Image table keys: <CR> vulns · st/sc/sv sort (version/created/vuln) · ] more · [ fewer
+--                     r refresh · gk packages · gr repos · gp projects · y yank ref · q quit
+--   (fetches newest-first, capped at state.limit; tune via setup({ image_limit=…, page_size=… }))
 --   Vuln detail keys: q close
 --
 -- :Gsm  → pick project → secret table → <CR> versions → <CR> reveal value
@@ -20,10 +21,12 @@ M.state = {
 	repo = nil,    -- { path = "loc-docker.pkg.dev/proj/repo", location = "loc", name = "repo" }
 	images = {},   -- list of image entries
 	sort = "version", -- version | created | vuln
+	limit = 50,    -- how many newest images to fetch (paged with `]` / `[`)
 }
 
--- How many `list-vulnerabilities` calls to run at once while populating the table lazily.
-local MAX_CONCURRENCY = 5
+-- Config (overridable via setup({ ... })).
+local PAGE_SIZE = 50       -- how much `]` / `[` grow/shrink the fetch limit
+local MAX_CONCURRENCY = 5  -- concurrent `list-vulnerabilities` calls while populating lazily
 
 local ns = vim.api.nvim_create_namespace("gcp")
 
@@ -219,10 +222,11 @@ local function render_images()
 		return cmp_version_desc(a, b)
 	end)
 
+	local shown = string.format("showing %d (newest first)%s", #entries, M.state.maybe_more and " · more available" or "")
 	local lines = {
-		"  GCP Artifact Registry — " .. (M.state.repo and M.state.repo.path or ""),
-		"  sort:" .. M.state.sort .. "   <CR> vulns · st/sc/sv sort · r refresh · gr repos · gp projects · y yank · q quit",
-		"",
+		"  GCP Artifact Registry — " .. (M.state.package and M.state.package.path or (M.state.repo and M.state.repo.path) or ""),
+		"  " .. shown .. " · sort:" .. M.state.sort,
+		"  <CR> vulns · st/sc/sv sort · ] more · [ fewer · r refresh · gk packages · gr repos · gp projects · y yank · q quit",
 		string.format(ROW_FMT, "IMAGE:TAG", "DIGEST", "CREATED", "VULNERABILITIES"),
 		"  " .. string.rep("─", 86),
 	}
@@ -300,12 +304,16 @@ function M.open_images()
 	if not M.state.repo then
 		return M.pick_repo()
 	end
+	if not M.state.package then
+		return M.pick_package()
+	end
+	local img_path = M.state.package.path -- loc-docker.pkg.dev/proj/repo/image
 	local buf = vim.api.nvim_create_buf(false, true)
 	M.img_buf = buf
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].filetype = "gar-images"
-	pcall(vim.api.nvim_buf_set_name, buf, "gar://" .. M.state.repo.path)
+	pcall(vim.api.nvim_buf_set_name, buf, "gar://" .. img_path)
 	vim.api.nvim_set_current_buf(buf)
 
 	local function map(lhs, fn, desc)
@@ -316,18 +324,23 @@ function M.open_images()
 	map("sc", function() M.state.sort = "created"; render_images() end, "Sort by created")
 	map("sv", function() M.state.sort = "vuln"; render_images() end, "Sort by vulnerability")
 	map("r", function() M.open_images() end, "Refresh")
+	map("gk", function() M.pick_package() end, "Back to packages")
 	map("gr", function() M.pick_repo() end, "Back to repos")
 	map("gp", function() M.pick_project() end, "Back to projects")
 	map("y", function() M.yank_under_cursor() end, "Yank image ref")
+	map("]", function() M.state.limit = M.state.limit + PAGE_SIZE; M.open_images() end, "Load more (raise limit)")
+	map("[", function() M.state.limit = math.max(PAGE_SIZE, M.state.limit - PAGE_SIZE); M.open_images() end, "Load fewer")
 	map("q", function() vim.api.nvim_buf_delete(buf, { force = true }) end, "Close")
 
 	vim.bo[buf].modifiable = true
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "  loading images for " .. M.state.repo.path .. " …" })
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "  loading newest " .. M.state.limit .. " images for " .. img_path .. " …" })
 	vim.bo[buf].modifiable = false
 
-	notify("loading images…")
+	notify("loading images (newest " .. M.state.limit .. ")…")
 	gcloud_json(
-		{ "artifacts", "docker", "images", "list", M.state.repo.path, "--include-tags", "--project=" .. M.state.project },
+		-- scoped to the chosen package, newest-first + capped, so it stays fast
+		{ "artifacts", "docker", "images", "list", img_path, "--include-tags",
+			"--sort-by=~UPDATE_TIME", "--limit=" .. M.state.limit, "--project=" .. M.state.project },
 		function(ok, data, err)
 			if not ok then
 				notify("images list failed: " .. err, vim.log.levels.ERROR)
@@ -349,6 +362,8 @@ function M.open_images()
 				})
 			end
 			M.state.images = entries
+			-- If we got exactly `limit` rows there are probably more to page into.
+			M.state.maybe_more = (#entries >= M.state.limit)
 			vim.schedule(function()
 				render_images()
 				start_vuln_scan()
@@ -500,10 +515,50 @@ function M.pick_repo()
 				return string.format("%s   [%s]", r.name, r.location)
 			end, function(r)
 				M.state.repo = r
-				M.open_images()
+				M.pick_package()
 			end)
 		end)
 	end)
+end
+
+-- A repo holds many packages (image names); pick one, then list its images (tags/digests).
+function M.pick_package()
+	if not M.state.repo then
+		return M.pick_repo()
+	end
+	local repo = M.state.repo
+	notify("loading packages…")
+	gcloud_json(
+		{ "artifacts", "packages", "list", "--repository=" .. repo.name, "--location=" .. repo.location,
+			"--project=" .. M.state.project },
+		function(ok, data, err)
+			if not ok then
+				notify("packages list failed: " .. err, vim.log.levels.ERROR)
+				return
+			end
+			local pkgs = {}
+			for _, p in ipairs(data or {}) do
+				-- name: projects/P/locations/L/repositories/R/packages/IMAGE  (IMAGE may be %2F-encoded if nested)
+				local short = (p.name or ""):match("/packages/(.+)$")
+				if short then
+					short = short:gsub("%%2F", "/")
+					table.insert(pkgs, { name = short, path = repo.path .. "/" .. short })
+				end
+			end
+			vim.schedule(function()
+				if #pkgs == 1 then
+					M.state.package = pkgs[1] -- only one image — skip the picker
+					return M.open_images()
+				end
+				select_one("Images in " .. repo.name, pkgs, function(p)
+					return p.name
+				end, function(p)
+					M.state.package = p
+					M.open_images()
+				end)
+			end)
+		end
+	)
 end
 
 -- next_fn runs after a project is chosen (defaults to the registry repo picker).
@@ -815,7 +870,12 @@ end
 -- entry points
 ----------------------------------------------------------------------
 
-function M.setup()
+-- setup({ image_limit = 50, page_size = 50, max_concurrency = 5 })
+function M.setup(opts)
+	opts = opts or {}
+	M.state.limit = opts.image_limit or M.state.limit
+	PAGE_SIZE = opts.page_size or PAGE_SIZE
+	MAX_CONCURRENCY = opts.max_concurrency or MAX_CONCURRENCY
 	vim.api.nvim_create_user_command("Gar", function()
 		M.pick_project(M.pick_repo)
 	end, { desc = "Browse GCP Artifact Registry (project → repo → images → vulns)" })
