@@ -116,6 +116,7 @@ require("lazy").setup({
 				{ "<leader>s",  group = "splits" },
 				{ "<leader>x",  group = "diagnostics (trouble)" },
 				{ "<leader>c",  group = "code" },
+				{ "<leader>k",  desc = "kubectl (kubernetes)" },
 			})
 		end,
 	},
@@ -1415,6 +1416,20 @@ require("lazy").setup({
 			distance_stop_animating = 0.5,
 			hide_target_hack = false,
 		},
+	},
+
+	-- kubectl.nvim: interactive Kubernetes cluster manager (uses pre-built Rust binary, no cargo needed)
+	{
+		"ramilito/kubectl.nvim",
+		version = "2.*",
+		dependencies = "saghen/blink.download",
+		cmd = { "Kubectl", "Kubens", "Kubectx" },
+		keys = {
+			{ "<leader>k", function() require("kubectl").toggle({ tab = false }) end, desc = "Toggle Kubectl" },
+		},
+		config = function()
+			require("kubectl").setup()
+		end,
 	},
 })
 

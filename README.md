@@ -12,6 +12,7 @@ My personal Neovim configuration with LSP, autocompletion, and modern plugins.
 - **Harpoon** for quick file/terminal navigation (terminal-aware)
 - **Neogit** git interface (Magit-style, with diffview)
 - **Octo.nvim** GitHub integration (PRs, issues, reviews — no browser needed)
+- **kubectl.nvim** interactive Kubernetes cluster manager
 - **Markdown** support with preview and tables
 - **Flash.nvim** for enhanced motion
 - **Conform.nvim** for code formatting (folds preserved on save)
@@ -85,7 +86,7 @@ Buffers are shown as visual tabs at the top of the screen.
 | `<leader>tx` | Normal | Close current buffer tab |
 | `<S-l>` | Normal | Next buffer tab |
 | `<S-h>` | Normal | Previous buffer tab |
-| `<leader>bx` | Normal | Close buffer |
+| `<S-x>` | Normal | Close buffer |
 
 ### Notes
 
@@ -198,16 +199,20 @@ function foo() {     // <- za anywhere inside closes this
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<leader>tt` | Normal | Open terminal in current window |
-| `<leader>tv` | Normal | Open terminal in vertical split |
-| `<leader>th` | Normal | Open terminal in horizontal split |
+| `<leader>tt` | Normal | Open terminal in current window (Neovim cwd) |
+| `<leader>tv` | Normal | Open terminal in vertical split (Neovim cwd) |
+| `<leader>th` | Normal | Open terminal in horizontal split (Neovim cwd) |
+| `<leader>tct` | Normal | Open terminal in current window (current file's dir) |
+| `<leader>tcv` | Normal | Open terminal in vertical split (current file's dir) |
+| `<leader>tch` | Normal | Open terminal in horizontal split (current file's dir) |
 | `jk` | Terminal | Exit terminal mode (normal terminals only) |
 
 ### Git (Neogit)
 
 | Shortcut | Mode | Description |
 |----------|------|-------------|
-| `<leader>lg` | Normal | Open Neogit (in current file's git repo) |
+| `<leader>lg` | Normal | Open Neogit (in current working directory's git repo) |
+| `<leader>lG` | Normal | Open Neogit (in current file's directory) |
 
 #### Neogit Cheatsheet
 
@@ -290,6 +295,21 @@ Neogit opens as a buffer (Magit-style). Press `q` to close.
 | `rr` | Continue rebase |
 | `ra` | Abort rebase |
 
+### Git Hunks (Gitsigns)
+
+Stage, reset, and navigate individual changed hunks inline without leaving the buffer.
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `]h` | Normal | Jump to next hunk |
+| `[h` | Normal | Jump to previous hunk |
+| `<leader>hs` | Normal/Visual | Stage hunk (or selected range) |
+| `<leader>hr` | Normal/Visual | Reset hunk (or selected range) |
+| `<leader>hp` | Normal | Preview hunk |
+| `<leader>hd` | Normal | Diff current file |
+| `<leader>hb` | Normal | Blame current line (full) |
+| `<leader>hB` | Normal | Toggle inline line blame |
+
 ### Diffview (Side-by-side diffs & file history)
 
 | Shortcut | Mode | Description |
@@ -299,6 +319,7 @@ Neogit opens as a buffer (Magit-style). Press `q` to close.
 | `<leader>dh` | Normal | File history for current file |
 | `<leader>dH` | Normal | File history for whole repo |
 | `<leader>dc` | Normal | Close diffview |
+| `<leader>dt` | Normal | Toggle diff between open split windows |
 
 **Inside diffview:**
 
@@ -349,6 +370,40 @@ Requires `gh` CLI authenticated (`gh auth login`). Open a PR/issue first with th
 | `<leader>gco` | Normal | Add comment |
 | `<leader>gra` | Normal | Add reviewer |
 | `<leader>gla` | Normal | Add label |
+
+**Workflow: view a PR, check approval, then merge**
+
+1. **View / open a PR** — press `<leader>gpl` to list PRs, then `<CR>` on one to open it (or run `:Octo pr edit <number>` directly). The PR buffer opens showing the title, description, reviews, and status at the top.
+2. **Check if it's approved** — look at the **Reviewers** section in the PR buffer header: each reviewer shows `APPROVED`, `CHANGES_REQUESTED`, or `PENDING`. The PR is mergeable once it shows `APPROVED` with no outstanding change requests.
+3. **Check CI status** — press `<leader>gpk` to see PR checks / CI. Make sure required checks are green before merging.
+4. **Merge it** — once approved and checks pass, press `<leader>gpm` to merge the PR (you'll be prompted for the merge method: merge / squash / rebase).
+
+> Prefer the browser? `<leader>gpb` opens the current PR on GitHub, where the approval badge and merge button are also visible.
+
+### Kubernetes (kubectl.nvim)
+
+Interactive cluster manager. Uses your current `~/.kube/config` context. Ships a pre-built Rust backend binary (downloaded automatically on first load — **no `cargo`/Rust toolchain required**).
+
+| Shortcut | Mode | Description |
+|----------|------|-------------|
+| `<leader>k` | Normal | Toggle the kubectl view |
+
+**Inside the kubectl view:**
+
+| Key | Description |
+|-----|-------------|
+| `1`–`6` | Jump to Deployments / Pods / ConfigMaps / Secrets / Services / Ingresses |
+| `<CR>` | Select / drill into resource |
+| `<BS>` | Go back to previous view |
+| `gd` | Describe resource |
+| `gl` | View logs |
+| `gp` | Port forward |
+| `gr` | Refresh view |
+| `?` | Show all available keymaps for the current view |
+
+**Commands:** `:Kubectl` (run/view, e.g. `:Kubectl get endpoints`), `:Kubens` (switch namespace), `:Kubectx` (switch context).
+
+> Requires the `kubectl` CLI installed and a valid kubeconfig. The view always reflects your active context — switch it with `:Kubectx`.
 
 ### Line Movement
 
