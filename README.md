@@ -415,14 +415,15 @@ A small **local module** (`lua/gcp/`) that drives the `gcloud` CLI. Every action
 | `<leader>K` | Normal | Artifact Registry browser (`:Gar`) — pick project → repo → images |
 | `<leader>G` | Normal | Secret Manager browser (`:Gsm`) — pick project → secrets → versions |
 
-**Artifact Registry flow:** pick a project → pick a Docker repo → pick a **package** (image name) → image table. This follows Artifact Registry's real hierarchy (`repo → package → versions`), so you scope to one image instead of every image in the repo. (If a repo has only one package, the picker is skipped.) The table shows the full **tag(s)** (column sizes to fit — no truncation), short digest, created time, and a **vulnerability column** with `C:`/`H:`/`M:`/`L:` counts (`clean`, or `—` if no scan data). Counts come from **one bulk `list --show-occurrences` call** — the same source the GCP Console uses — so all rows populate at once instead of trickling in. Images whose continuous scanning has lapsed (not pulled in 30 days) are marked `(stale)`, matching the console. Sorted by version tag by default. (`<CR>` still fetches the full per-image CVE list on demand.)
+**Artifact Registry flow:** pick a project → pick a Docker repo → pick a **package** (image name) → image table. This follows Artifact Registry's real hierarchy (`repo → package → versions`), so you scope to one image instead of every image in the repo. (If a repo has only one package, the picker is skipped.) The table shows the full **tag(s)** (column sizes to fit — no truncation), short digest, created time, and a **vuln column**. The image list itself loads fast — **no vulnerability scanning happens up front**. Vulnerabilities are fetched **on demand, per image**: press `v` on a row to load just its `C:`/`H:`/`M:`/`L:` count, or `<CR>` to open the full CVE list (which also fills in the count). Sorted by version tag by default.
 
 To stay fast, it fetches the **newest N images** (default 50) for the package rather than everything, and the header shows `showing N (newest first) · more available`. Use `]` / `[` to load more / fewer. Tune the default with `require("gcp").setup({ image_limit = 50, page_size = 50 })`.
 
 | Key (image table) | Description |
 |-----|-------------|
+| `v` | Check this image's vuln count (on demand) — shows in the table |
 | `<CR>` | Show the image's CVEs (severity, CVE id, package, affected → fixed, CVSS) |
-| `st` / `sc` / `sv` | Sort by version / created / vulnerability severity |
+| `st` / `sc` | Sort by version / created |
 | `]` / `[` | Load more / fewer images (raise/lower the fetch limit) |
 | `gk` / `gr` / `gp` | Back to packages / repos / projects |
 | `r` | Refresh |

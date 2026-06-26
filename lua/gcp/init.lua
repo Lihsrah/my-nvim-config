@@ -3,9 +3,10 @@
 -- Backed entirely by the `gcloud` CLI. Requires `gcloud` installed + authenticated.
 -- For Artifact Registry vuln data, Artifact Analysis / Container Scanning must be enabled.
 --
--- :Gar  → pick project → pick repo → pick package (image) → image table → <CR> CVE detail
---   Image table keys: <CR> vulns · st/sc/sv sort (version/created/vuln) · ] more · [ fewer
---                     r refresh · gk packages · gr repos · gp projects · y yank ref · q quit
+-- :Gar  → pick project → pick repo → pick package (image) → image table
+--   The list loads fast (no vuln scan up front). Vulnerabilities are fetched ON DEMAND, per image.
+--   Image table keys: v check vuln count (this row) · <CR> full CVE details · st/sc sort
+--                     ] more · [ fewer · r refresh · gk packages · gr repos · gp projects · y yank · q quit
 --   (fetches newest-first, capped at state.limit; tune via setup({ image_limit=…, page_size=… }))
 --   Vuln detail keys: q close
 --
@@ -20,13 +21,12 @@ M.state = {
 	project = nil, -- projectId string
 	repo = nil,    -- { path = "loc-docker.pkg.dev/proj/repo", location = "loc", name = "repo" }
 	images = {},   -- list of image entries
-	sort = "version", -- version | created | vuln
+	sort = "version", -- version | created
 	limit = 50,    -- how many newest images to fetch (paged with `]` / `[`)
 }
 
 -- Config (overridable via setup({ ... })).
-local PAGE_SIZE = 50       -- how much `]` / `[` grow/shrink the fetch limit
-local MAX_CONCURRENCY = 5  -- concurrent vuln-describe calls while populating the table lazily
+local PAGE_SIZE = 50 -- how much `]` / `[` grow/shrink the fetch limit
 
 local ns = vim.api.nvim_create_namespace("gcp")
 
@@ -169,18 +169,22 @@ local function cmp_version_desc(a, b)
 	return (a.createTime or "") > (b.createTime or "")
 end
 
--- Returns (display_text, highlight_group) for an entry's vuln state.
+----------------------------------------------------------------------
+-- on-demand vulnerabilities (per image, fetched only when asked)
+----------------------------------------------------------------------
+
+-- Display (text, hl) for an entry's vuln state.
+-- nil = not checked yet (blank), false = checked but no data, table = counts.
 local function vuln_cell(entry)
 	local v = entry.vuln
-	local stale = entry.stale and " (stale)" or ""
 	if v == nil then
-		return "scanning…", "Comment"
+		return "", nil
 	end
 	if v == false then
 		return "—", "Comment"
 	end
 	if v.total == 0 then
-		return "clean" .. stale, "DiagnosticOk"
+		return "clean", "DiagnosticOk"
 	end
 	local parts = {}
 	if v.critical > 0 then table.insert(parts, "C:" .. v.critical) end
@@ -189,7 +193,61 @@ local function vuln_cell(entry)
 	if v.low > 0 then table.insert(parts, "L:" .. v.low) end
 	local hl = (v.critical > 0 or v.high > 0) and "DiagnosticError"
 		or (v.medium > 0 and "DiagnosticWarn" or "DiagnosticHint")
-	return table.concat(parts, " ") .. stale, hl
+	return table.concat(parts, " "), hl
+end
+
+-- Normalise `describe --show-package-vulnerability` output into a flat occurrence list.
+local function extract_occurrences(data)
+	if type(data) ~= "table" then
+		return nil
+	end
+	local occ = data
+	local pvs = data.package_vulnerability_summary
+	if pvs and pvs.vulnerabilities then
+		occ = pvs.vulnerabilities
+	end
+	local list = {}
+	if type(occ) == "table" then
+		if occ.CRITICAL or occ.HIGH or occ.MEDIUM or occ.LOW or occ.SEVERITY_UNSPECIFIED then
+			for _, arr in pairs(occ) do
+				if type(arr) == "table" then
+					for _, o in ipairs(arr) do table.insert(list, o) end
+				end
+			end
+		else
+			for _, o in ipairs(occ) do table.insert(list, o) end
+		end
+	end
+	return list
+end
+
+-- Tally a flat occurrence list into counts (caches the raw occurrences for the detail view).
+local function count_occ(occ)
+	local c = { critical = 0, high = 0, medium = 0, low = 0, total = 0, occ = occ }
+	for _, o in ipairs(occ) do
+		local v = o.vulnerability or {}
+		local sev = tostring(v.effectiveSeverity or v.severity or "UNKNOWN"):upper()
+		if sev == "CRITICAL" then c.critical = c.critical + 1
+		elseif sev == "HIGH" then c.high = c.high + 1
+		elseif sev == "MEDIUM" then c.medium = c.medium + 1
+		elseif sev == "LOW" then c.low = c.low + 1 end
+		c.total = c.total + 1
+	end
+	return c
+end
+
+-- Fetch vuln occurrences for one image ref (Artifact Analysis automatic scan results).
+local function fetch_vulns(ref, cb)
+	gcloud_json(
+		{ "artifacts", "docker", "images", "describe", ref, "--show-package-vulnerability",
+			"--project=" .. M.state.project },
+		function(ok, data)
+			if not ok then
+				return cb(nil)
+			end
+			cb(extract_occurrences(data))
+		end
+	)
 end
 
 ----------------------------------------------------------------------
@@ -206,15 +264,6 @@ local function render_images()
 	table.sort(entries, function(a, b)
 		if M.state.sort == "created" then
 			return (a.createTime or "") > (b.createTime or "")
-		elseif M.state.sort == "vuln" then
-			local function score(e)
-				local v = e.vuln
-				if type(v) ~= "table" then
-					return -1
-				end
-				return v.critical * 1e6 + v.high * 1e4 + v.medium * 1e2 + v.low
-			end
-			return score(a) > score(b)
 		end
 		return cmp_version_desc(a, b)
 	end)
@@ -237,9 +286,9 @@ local function render_images()
 	local lines = {
 		"  GCP Artifact Registry — " .. (M.state.package and M.state.package.path or (M.state.repo and M.state.repo.path) or ""),
 		"  " .. shown .. " · sort:" .. M.state.sort,
-		"  <CR> vulns · st/sc/sv sort · ] more · [ fewer · r refresh · gk packages · gr repos · gp projects · y yank · q quit",
-		string.format(fmt, "TAG", "DIGEST", "CREATED", "VULNERABILITIES"),
-		"  " .. string.rep("─", tagw + 2 + 16 + 2 + 19 + 2 + 15),
+		"  v check vuln · <CR> details · st/sc sort · ] more · [ fewer · r refresh · gk packages · gr repos · gp projects · y yank · q quit",
+		string.format(fmt, "TAG", "DIGEST", "CREATED", "VULN"),
+		"  " .. string.rep("─", tagw + 2 + 16 + 2 + 19 + 2 + 6),
 	}
 	M.img_rowmap = {}
 	local hl_lines = {}
@@ -249,8 +298,9 @@ local function render_images()
 		local line = string.format(fmt, tag_str(e), (e._digest or ""):sub(1, 16), created, vtext)
 		table.insert(lines, line)
 		M.img_rowmap[#lines] = e
-		-- highlight only the vuln cell (last column); its start = line length minus vuln text length
-		hl_lines[#lines] = { hl = vhl, vcol = #line - #vtext, len = #line }
+		if vhl then
+			hl_lines[#lines] = { hl = vhl, vcol = #line - #vtext, len = #line }
+		end
 	end
 
 	vim.bo[buf].modifiable = true
@@ -265,162 +315,6 @@ local function render_images()
 			hl_group = info.hl,
 		})
 	end
-end
-
--- Bump a severity into a counts table.
-local function add_sev(c, sev, n)
-	sev = tostring(sev):upper()
-	n = n or 1
-	if sev == "CRITICAL" then c.critical = c.critical + n
-	elseif sev == "HIGH" then c.high = c.high + n
-	elseif sev == "MEDIUM" then c.medium = c.medium + n
-	elseif sev == "LOW" then c.low = c.low + n
-	else return false end
-	c.total = c.total + n
-	return true
-end
-
--- From a `list --show-occurrences` image object, derive vuln COUNTS + a stale flag in one pass.
--- Defensive across gcloud output shapes: counts either from embedded VULNERABILITY occurrences
--- (objects carrying a `vulnerability` table) or from a severity→number summary map. Stale comes
--- from a DISCOVERY occurrence whose continuous-analysis state is INACTIVE.
-local function summarize_image(im)
-	local c = { critical = 0, high = 0, medium = 0, low = 0, total = 0 }
-	local from_occ, from_sum, scanned, stale = false, false, false, false
-	local sum = { critical = 0, high = 0, medium = 0, low = 0, total = 0 }
-
-	local function walk(v, depth)
-		if type(v) ~= "table" or depth > 7 then
-			return
-		end
-		-- a full vulnerability occurrence
-		if type(v.vulnerability) == "table" then
-			if add_sev(c, v.vulnerability.effectiveSeverity or v.vulnerability.severity or "?") then
-				from_occ = true
-			end
-		end
-		-- discovery occurrence → scanned + stale signal
-		local ca = v.continuousAnalysis or (type(v.discovery) == "table" and v.discovery.continuousAnalysis)
-		if ca then
-			scanned = true
-			if tostring(ca):upper() == "INACTIVE" then
-				stale = true
-			end
-		end
-		if tostring(v.kind or ""):upper() == "DISCOVERY" then
-			scanned = true
-		end
-		-- a severity→count summary map (e.g. { CRITICAL = 2, HIGH = 5 })
-		for _, k in ipairs({ "CRITICAL", "HIGH", "MEDIUM", "LOW" }) do
-			if type(v[k]) == "number" then
-				add_sev(sum, k, v[k])
-				from_sum = true
-			end
-		end
-		for _, child in pairs(v) do
-			walk(child, depth + 1)
-		end
-	end
-	walk(im, 0)
-
-	local counts
-	if from_occ then
-		counts = c
-	elseif from_sum then
-		counts = sum
-	elseif scanned then
-		counts = { critical = 0, high = 0, medium = 0, low = 0, total = 0 } -- scanned, clean
-	else
-		counts = nil -- no occurrence data found for this image
-	end
-	return counts, stale
-end
-
--- Normalise the `describe --show-package-vulnerability` payload into a flat occurrence list.
--- Handles: { package_vulnerability_summary = { vulnerabilities = <list|severity-map> } }
--- as well as a plain top-level occurrence array.
-local function extract_occurrences(data)
-	if type(data) ~= "table" then
-		return nil
-	end
-	local occ = data
-	local pvs = data.package_vulnerability_summary
-	if pvs and pvs.vulnerabilities then
-		occ = pvs.vulnerabilities
-	end
-	local list = {}
-	if type(occ) == "table" then
-		-- severity-keyed map (CRITICAL/HIGH/…) vs flat array
-		if occ.CRITICAL or occ.HIGH or occ.MEDIUM or occ.LOW or occ.SEVERITY_UNSPECIFIED then
-			for _, arr in pairs(occ) do
-				if type(arr) == "table" then
-					for _, o in ipairs(arr) do
-						table.insert(list, o)
-					end
-				end
-			end
-		else
-			for _, o in ipairs(occ) do
-				table.insert(list, o)
-			end
-		end
-	end
-	return list
-end
-
--- Fetch vulnerability occurrences for one image ref (automatic/Artifact-Analysis scanning).
-local function fetch_vulns(ref, cb)
-	gcloud_json(
-		{ "artifacts", "docker", "images", "describe", ref, "--show-package-vulnerability",
-			"--project=" .. M.state.project },
-		function(ok, data)
-			if not ok then
-				return cb(nil)
-			end
-			cb(extract_occurrences(data))
-		end
-	)
-end
-
--- Populate vuln counts lazily after the table is shown, throttled to MAX_CONCURRENCY.
-local function start_vuln_scan()
-	local queue = {}
-	for _, e in ipairs(M.state.images) do
-		if e.vuln == nil then
-			table.insert(queue, e)
-		end
-	end
-	local active, idx = 0, 1
-	local function pump()
-		while active < MAX_CONCURRENCY and idx <= #queue do
-			local e = queue[idx]
-			idx = idx + 1
-			active = active + 1
-			fetch_vulns(e.ref, function(occ)
-				if occ then
-					local c = { critical = 0, high = 0, medium = 0, low = 0, total = 0, occ = occ }
-					for _, o in ipairs(occ) do
-						local v = o.vulnerability or {}
-						local sev = tostring(v.effectiveSeverity or v.severity or "UNKNOWN"):upper()
-						if sev == "CRITICAL" then c.critical = c.critical + 1
-						elseif sev == "HIGH" then c.high = c.high + 1
-						elseif sev == "MEDIUM" then c.medium = c.medium + 1
-						elseif sev == "LOW" then c.low = c.low + 1 end
-						c.total = c.total + 1
-					end
-					e.vuln = c
-				else
-					e.vuln = false -- not scanned / scanning disabled / error
-				end
-				active = active - 1
-				vim.schedule(function()
-					render_images()
-					pump()
-				end)
-			end)
-		end
-	end
-	pump()
 end
 
 function M.open_images()
@@ -442,10 +336,10 @@ function M.open_images()
 	local function map(lhs, fn, desc)
 		vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true, desc = desc })
 	end
-	map("<CR>", function() M.show_vulns_under_cursor() end, "Show vulnerabilities")
+	map("v", function() M.check_vuln_under_cursor() end, "Check vuln count (this image)")
+	map("<CR>", function() M.show_vulns_under_cursor() end, "Vulnerability details")
 	map("st", function() M.state.sort = "version"; render_images() end, "Sort by version")
 	map("sc", function() M.state.sort = "created"; render_images() end, "Sort by created")
-	map("sv", function() M.state.sort = "vuln"; render_images() end, "Sort by vulnerability")
 	map("r", function() M.open_images() end, "Refresh")
 	map("gk", function() M.pick_package() end, "Back to packages")
 	map("gr", function() M.pick_repo() end, "Back to repos")
@@ -461,26 +355,17 @@ function M.open_images()
 
 	notify("loading images (newest " .. M.state.limit .. ")…")
 	gcloud_json(
-		-- ONE bulk call: list + per-image vuln/discovery occurrence SUMMARIES (what the console does),
-		-- newest-first + capped. --show-occurrences-from must cover the whole page or older rows get none.
+		-- plain list: scoped to the package, newest-first + capped, so it stays fast
 		{ "artifacts", "docker", "images", "list", img_path, "--include-tags",
-			"--sort-by=~UPDATE_TIME", "--limit=" .. M.state.limit,
-			"--show-occurrences", "--show-occurrences-from=" .. M.state.limit,
-			'--occurrence-filter=kind="VULNERABILITY" OR kind="DISCOVERY"',
-			"--project=" .. M.state.project },
+			"--sort-by=~UPDATE_TIME", "--limit=" .. M.state.limit, "--project=" .. M.state.project },
 		function(ok, data, err)
 			if not ok then
 				notify("images list failed: " .. err, vim.log.levels.ERROR)
 				return
 			end
 			local entries = {}
-			local any_vuln_data = false
 			for _, im in ipairs(data or {}) do
 				local tags = normalize_tags(im.tags)
-				local counts, stale = summarize_image(im)
-				if counts ~= nil then
-					any_vuln_data = true
-				end
 				table.insert(entries, {
 					package = im.package,
 					version = im.version, -- sha256:...
@@ -490,28 +375,45 @@ function M.open_images()
 					_img = (im.package or ""):match("/([^/]+)$") or im.package,
 					_tag = best_tag(tags),
 					_digest = (im.version or ""):gsub("^sha256:", ""),
-					vuln = counts, -- nil only if the bulk call carried no occurrence data
-					stale = stale,
 				})
 			end
 			M.state.images = entries
 			-- If we got exactly `limit` rows there are probably more to page into.
 			M.state.maybe_more = (#entries >= M.state.limit)
-			vim.schedule(function()
-				render_images()
-				-- Fallback: only if the bulk summaries carried nothing (output shape differs),
-				-- fill counts the slow per-image way so the column still populates.
-				if not any_vuln_data then
-					start_vuln_scan()
-				end
-			end)
+			vim.schedule(render_images)
 		end
 	)
 end
 
-----------------------------------------------------------------------
--- vuln detail
-----------------------------------------------------------------------
+function M.entry_under_cursor()
+	local ln = vim.api.nvim_win_get_cursor(0)[1]
+	return M.img_rowmap and M.img_rowmap[ln]
+end
+
+function M.yank_under_cursor()
+	local e = M.entry_under_cursor()
+	if not e then
+		return
+	end
+	vim.fn.setreg("+", e.ref)
+	notify("yanked: " .. e.ref)
+end
+
+-- `v`: fetch just the vuln COUNT for the image under the cursor and show it in the table.
+function M.check_vuln_under_cursor()
+	local e = M.entry_under_cursor()
+	if not e then
+		return
+	end
+	if type(e.vuln) == "table" then
+		return -- already checked
+	end
+	notify("checking vulnerabilities for " .. (e._tag or e._digest or "image") .. "…")
+	fetch_vulns(e.ref, function(occ)
+		e.vuln = occ and count_occ(occ) or false
+		vim.schedule(render_images)
+	end)
+end
 
 local SEV_ORDER = { CRITICAL = 1, HIGH = 2, MEDIUM = 3, LOW = 4, MINIMAL = 5, UNKNOWN = 6 }
 local DETAIL_FMT = "  %-9s %-20s %-22s %-18s %-18s %s"
@@ -580,20 +482,7 @@ function M.render_vuln_detail(entry, occurrences)
 	end
 end
 
-function M.entry_under_cursor()
-	local ln = vim.api.nvim_win_get_cursor(0)[1]
-	return M.img_rowmap and M.img_rowmap[ln]
-end
-
-function M.yank_under_cursor()
-	local e = M.entry_under_cursor()
-	if not e then
-		return
-	end
-	vim.fn.setreg("+", e.ref)
-	notify("yanked: " .. e.ref)
-end
-
+-- `<CR>`: fetch (or reuse) the full CVE list for the image under the cursor and open the detail view.
 function M.show_vulns_under_cursor()
 	local e = M.entry_under_cursor()
 	if not e then
@@ -601,15 +490,18 @@ function M.show_vulns_under_cursor()
 		return
 	end
 	if type(e.vuln) == "table" and e.vuln.occ then
-		M.render_vuln_detail(e, e.vuln.occ) -- use cached scan result
-		return
+		return M.render_vuln_detail(e, e.vuln.occ) -- reuse cached result
 	end
 	notify("fetching vulnerabilities…")
 	fetch_vulns(e.ref, function(occ)
 		vim.schedule(function()
-			if occ and #occ > 0 then
+			if occ then
+				e.vuln = count_occ(occ)
+				render_images()
 				M.render_vuln_detail(e, occ)
 			else
+				e.vuln = false
+				render_images()
 				notify("no vulnerability data for this image", vim.log.levels.WARN)
 			end
 		end)
@@ -1052,12 +944,11 @@ end
 -- entry points
 ----------------------------------------------------------------------
 
--- setup({ image_limit = 50, page_size = 50, max_concurrency = 5 })
+-- setup({ image_limit = 50, page_size = 50 })
 function M.setup(opts)
 	opts = opts or {}
 	M.state.limit = opts.image_limit or M.state.limit
 	PAGE_SIZE = opts.page_size or PAGE_SIZE
-	MAX_CONCURRENCY = opts.max_concurrency or MAX_CONCURRENCY
 	vim.api.nvim_create_user_command("Gar", function()
 		M.pick_project(M.pick_repo)
 	end, { desc = "Browse GCP Artifact Registry (project → repo → images → vulns)" })
