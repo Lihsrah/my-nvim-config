@@ -2,6 +2,12 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
+-- Keep local helper binaries, such as the unzip shim Mason needs, available.
+local local_bin = vim.fn.expand("~/.local/bin")
+if not (vim.env.PATH or ""):find(local_bin, 1, true) then
+    vim.env.PATH = local_bin .. ":" .. (vim.env.PATH or "")
+end
+
 -- Disable accidental macro recording; use Q to record macros instead
 vim.keymap.set("n", "q", "<nop>")
 vim.keymap.set("n", "Q", "q")
@@ -120,6 +126,18 @@ require("lazy").setup({
 				{ "<leader>kc", desc = "Flagger canaries (live)" },
 				{ "<leader>K",  desc = "GCP artifact registry" },
 				{ "<leader>G",  desc = "GCP secret manager" },
+			})
+		end,
+	},
+
+	-- Filetype icons used by Oil, Telescope, Bufferline, Trouble, etc.
+	{
+		"nvim-tree/nvim-web-devicons",
+		lazy = true,
+		config = function()
+			require("nvim-web-devicons").setup({
+				color_icons = true,
+				default = true,
 			})
 		end,
 	},
@@ -755,6 +773,72 @@ require("lazy").setup({
 					enable = true,
 				},
 			})
+
+			-- nvim-treesitter v0.10 directives expect captures as TSNode values, while
+			-- Neovim 0.12 passes a list of nodes for each capture id.
+			local query = require("vim.treesitter.query")
+			local directive_opts = { force = true }
+			local html_script_type_languages = {
+				importmap = "json",
+				module = "javascript",
+				["application/ecmascript"] = "javascript",
+				["text/ecmascript"] = "javascript",
+			}
+			local injection_language_aliases = {
+				ex = "elixir",
+				pl = "perl",
+				sh = "bash",
+				ts = "typescript",
+				uxn = "uxntal",
+			}
+			local function first_capture_node(match, capture_id)
+				local captured = match[capture_id]
+				if type(captured) == "table" then
+					return captured[1]
+				end
+				return captured
+			end
+			local function parser_from_info_string(alias)
+				local filetype = vim.filetype.match({ filename = "a." .. alias })
+				return filetype or injection_language_aliases[alias] or alias
+			end
+
+			query.add_directive("set-lang-from-mimetype!", function(match, _, source, pred, metadata)
+				local node = first_capture_node(match, pred[2])
+				if not node then
+					return
+				end
+				local type_attr_value = vim.treesitter.get_node_text(node, source)
+				local configured = html_script_type_languages[type_attr_value]
+				if configured then
+					metadata["injection.language"] = configured
+				else
+					local parts = vim.split(type_attr_value, "/", {})
+					metadata["injection.language"] = parts[#parts]
+				end
+			end, directive_opts)
+
+			query.add_directive("set-lang-from-info-string!", function(match, _, source, pred, metadata)
+				local node = first_capture_node(match, pred[2])
+				if not node then
+					return
+				end
+				local injection_alias = vim.treesitter.get_node_text(node, source):lower()
+				metadata["injection.language"] = parser_from_info_string(injection_alias)
+			end, directive_opts)
+
+			query.add_directive("downcase!", function(match, _, source, pred, metadata)
+				local id = pred[2]
+				local node = first_capture_node(match, id)
+				if not node then
+					return
+				end
+				if not metadata[id] then
+					metadata[id] = {}
+				end
+				local text = vim.treesitter.get_node_text(node, source, { metadata = metadata[id] }) or ""
+				metadata[id].text = string.lower(text)
+			end, directive_opts)
 		end,
 	},
 
@@ -990,6 +1074,7 @@ require("lazy").setup({
 	-- Octo - GitHub integration (PRs, issues, reviews)
 	{
 		"pwntester/octo.nvim",
+		enabled = vim.fn.executable("gh") == 1,
 		dependencies = {
 			"nvim-lua/plenary.nvim",
 			"nvim-telescope/telescope.nvim",
@@ -1393,9 +1478,23 @@ require("lazy").setup({
 					separator_style = "thick",
 					show_buffer_close_icons = true,
 					show_close_icon = false,
-				show_tab_indicators = false,
+					show_tab_indicators = true,
 					diagnostics = "nvim_lsp",
-				diagnostics_indicator = function() return "" end,
+					diagnostics_indicator = function(_, _, diagnostics)
+						local icons = {
+							error = " ",
+							warning = " ",
+							info = " ",
+							hint = " ",
+						}
+						local result = {}
+						for severity, count in pairs(diagnostics) do
+							if count > 0 then
+								table.insert(result, icons[severity] .. count)
+							end
+						end
+						return table.concat(result)
+					end,
 					indicator = { style = "underline" },
 					custom_filter = function(buf_number)
 						return vim.bo[buf_number].buftype ~= "terminal"
@@ -1588,6 +1687,16 @@ vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.signcolumn = "yes"
 vim.opt.cursorline = true    -- highlight the line the cursor is on
+vim.diagnostic.config({
+    signs = {
+        text = {
+            [vim.diagnostic.severity.ERROR] = "",
+            [vim.diagnostic.severity.WARN] = "",
+            [vim.diagnostic.severity.INFO] = "",
+            [vim.diagnostic.severity.HINT] = "",
+        },
+    },
+})
 vim.opt.expandtab = true
 vim.opt.shiftwidth = 2
 vim.opt.tabstop = 2
@@ -1596,6 +1705,21 @@ vim.opt.wrap = false
 vim.opt.termguicolors = true
 vim.opt.fileformat = "unix" -- write files with LF line endings to avoid ^M
 vim.opt.clipboard = "unnamedplus"
+-- WSL2: pin win32yank explicitly so clipboard sync never depends on lazy auto-detection
+if vim.fn.has("wsl") == 1 and vim.fn.executable("win32yank.exe") == 1 then
+    vim.g.clipboard = {
+        name = "win32yank",
+        copy = {
+            ["+"] = "win32yank.exe -i --crlf",
+            ["*"] = "win32yank.exe -i --crlf",
+        },
+        paste = {
+            ["+"] = "win32yank.exe -o --lf",
+            ["*"] = "win32yank.exe -o --lf",
+        },
+        cache_enabled = 0,
+    }
+end
 vim.opt.ignorecase = true    -- search is case-insensitive by default
 vim.opt.smartcase = true     -- ...unless you type a capital letter, then it becomes case-sensitive
 vim.opt.scrolloff = 8        -- always keep 8 lines visible above/below the cursor when scrolling
@@ -2014,29 +2138,31 @@ vim.keymap.set("n", "<leader>lG", function()
 	require("neogit").open({ cwd = vim.fn.expand("%:p:h") })
 end, { desc = "Open Neogit (buffer dir)" })
 
--- Octo (GitHub) keybindings
--- PRs
-vim.keymap.set("n", "<leader>gpc", "<cmd>Octo pr create<cr>", { desc = "Create PR" })
-vim.keymap.set("n", "<leader>gpl", "<cmd>Octo pr list<cr>", { desc = "List PRs" })
-vim.keymap.set("n", "<leader>gpm", "<cmd>Octo pr merge<cr>", { desc = "Merge PR" })
-vim.keymap.set("n", "<leader>gpC", "<cmd>Octo pr checkout<cr>", { desc = "Checkout PR branch" })
-vim.keymap.set("n", "<leader>gpk", "<cmd>Octo pr checks<cr>", { desc = "PR checks / CI status" })
-vim.keymap.set("n", "<leader>gpr", "<cmd>Octo pr ready<cr>", { desc = "Mark PR as ready (convert from draft)" })
-vim.keymap.set("n", "<leader>gpx", "<cmd>Octo pr close<cr>", { desc = "Close PR" })
-vim.keymap.set("n", "<leader>gpb", "<cmd>!gh pr view --web<cr>", { desc = "Open PR in browser" })
--- Issues
-vim.keymap.set("n", "<leader>gic", "<cmd>Octo issue create<cr>", { desc = "Create issue" })
-vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
-vim.keymap.set("n", "<leader>gix", "<cmd>Octo issue close<cr>", { desc = "Close issue" })
--- Reviews
-vim.keymap.set("n", "<leader>grs", "<cmd>Octo review start<cr>", { desc = "Start review" })
-vim.keymap.set("n", "<leader>grr", "<cmd>Octo review resume<cr>", { desc = "Resume existing pending review" })
-vim.keymap.set("n", "<leader>grS", "<cmd>Octo review submit<cr>", { desc = "Submit review (approve/comment/request changes)" })
-vim.keymap.set("n", "<leader>grD", "<cmd>Octo review discard<cr>", { desc = "Discard review" })
--- Misc
-vim.keymap.set("n", "<leader>gco", "<cmd>Octo comment add<cr>", { desc = "Add comment" })
-vim.keymap.set("n", "<leader>gra", "<cmd>Octo reviewer add<cr>", { desc = "Add reviewer" })
-vim.keymap.set("n", "<leader>gla", "<cmd>Octo label add<cr>", { desc = "Add label" })
+if vim.fn.executable("gh") == 1 then
+    -- Octo (GitHub) keybindings
+    -- PRs
+    vim.keymap.set("n", "<leader>gpc", "<cmd>Octo pr create<cr>", { desc = "Create PR" })
+    vim.keymap.set("n", "<leader>gpl", "<cmd>Octo pr list<cr>", { desc = "List PRs" })
+    vim.keymap.set("n", "<leader>gpm", "<cmd>Octo pr merge<cr>", { desc = "Merge PR" })
+    vim.keymap.set("n", "<leader>gpC", "<cmd>Octo pr checkout<cr>", { desc = "Checkout PR branch" })
+    vim.keymap.set("n", "<leader>gpk", "<cmd>Octo pr checks<cr>", { desc = "PR checks / CI status" })
+    vim.keymap.set("n", "<leader>gpr", "<cmd>Octo pr ready<cr>", { desc = "Mark PR as ready (convert from draft)" })
+    vim.keymap.set("n", "<leader>gpx", "<cmd>Octo pr close<cr>", { desc = "Close PR" })
+    vim.keymap.set("n", "<leader>gpb", "<cmd>!gh pr view --web<cr>", { desc = "Open PR in browser" })
+    -- Issues
+    vim.keymap.set("n", "<leader>gic", "<cmd>Octo issue create<cr>", { desc = "Create issue" })
+    vim.keymap.set("n", "<leader>gil", "<cmd>Octo issue list<cr>", { desc = "List issues" })
+    vim.keymap.set("n", "<leader>gix", "<cmd>Octo issue close<cr>", { desc = "Close issue" })
+    -- Reviews
+    vim.keymap.set("n", "<leader>grs", "<cmd>Octo review start<cr>", { desc = "Start review" })
+    vim.keymap.set("n", "<leader>grr", "<cmd>Octo review resume<cr>", { desc = "Resume existing pending review" })
+    vim.keymap.set("n", "<leader>grS", "<cmd>Octo review submit<cr>", { desc = "Submit review (approve/comment/request changes)" })
+    vim.keymap.set("n", "<leader>grD", "<cmd>Octo review discard<cr>", { desc = "Discard review" })
+    -- Misc
+    vim.keymap.set("n", "<leader>gco", "<cmd>Octo comment add<cr>", { desc = "Add comment" })
+    vim.keymap.set("n", "<leader>gra", "<cmd>Octo reviewer add<cr>", { desc = "Add reviewer" })
+    vim.keymap.set("n", "<leader>gla", "<cmd>Octo label add<cr>", { desc = "Add label" })
+end
 
 -- Harpoon keybindings (with proper initialization)
 vim.keymap.set("n", "<leader>ma", function()
