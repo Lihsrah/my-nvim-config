@@ -1554,7 +1554,10 @@ vim.keymap.set("n", "<leader>G", "<cmd>Gsm<cr>", { desc = "GCP Secret Manager br
 
 -- Flagger progressive delivery: live view of Canary CRDs (auto-refreshes,
 -- so WEIGHT/STATUS update in place as a canary gradually migrates).
-vim.keymap.set("n", "<leader>kc", "<cmd>Kubectl view canaries<cr>", { desc = "Flagger canaries (live)" })
+-- kubectl.nvim caches CRDs by their fully-qualified name, so we must pass
+-- "canaries.flagger.app" — a bare "canaries" misses the cache and falls back
+-- to the default view.
+vim.keymap.set("n", "<leader>kc", "<cmd>Kubectl view canaries.flagger.app<cr>", { desc = "Flagger canaries (live)" })
 
 -- kubectl.nvim ships its quit action unmapped, so its views have no way out
 -- (BS only goes up a level). Map q to close the view and stop the background
