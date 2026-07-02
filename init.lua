@@ -1565,7 +1565,21 @@ vim.keymap.set("n", "<leader>kc", "<cmd>Kubectl view canaries.flagger.app<cr>", 
 vim.api.nvim_create_autocmd("FileType", {
 	pattern = "k8s_*",
 	callback = function(ev)
-		vim.keymap.set("n", "q", "<Plug>(kubectl.quit)", { buffer = ev.buf, nowait = true, silent = true, desc = "Close kubectl view" })
+		-- Context-aware q:
+		--  • Detail views (describe / yaml / alias / filter …) are floating
+		--    windows — just close the float to return to the list underneath.
+		--  • Main list view — a bare :close raises E444 when kubectl is the only
+		--    window (we open it in-place via toggle({ tab = false })), so tear
+		--    kubectl down cleanly with toggle() (also stops the informer and
+		--    resets is_open so <leader>k reopens correctly).
+		vim.keymap.set("n", "q", function()
+			local win = vim.api.nvim_get_current_win()
+			if vim.api.nvim_win_get_config(win).relative ~= "" then
+				pcall(vim.api.nvim_win_close, win, true)
+				return
+			end
+			require("kubectl").toggle()
+		end, { buffer = ev.buf, nowait = true, silent = true, desc = "Close kubectl view / back" })
 	end,
 })
 
