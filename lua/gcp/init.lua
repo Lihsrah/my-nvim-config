@@ -50,6 +50,9 @@ local function gcloud_json(argv, on_done)
 	local cmd = { "gcloud" }
 	vim.list_extend(cmd, argv)
 	table.insert(cmd, "--format=json")
+	-- Never prompt interactively (e.g. the "enable this API? (y/N)" prompt that
+	-- otherwise hangs the job); just fail with a clean non-zero exit.
+	table.insert(cmd, "--quiet")
 	vim.system(cmd, { text = true }, function(res)
 		if res.code ~= 0 then
 			on_done(false, nil, res.stderr or "")
@@ -69,6 +72,7 @@ end
 local function gcloud_run(argv, stdin, on_done)
 	local cmd = { "gcloud" }
 	vim.list_extend(cmd, argv)
+	table.insert(cmd, "--quiet") -- no interactive prompts; fail cleanly instead of hanging
 	local opts = { text = true }
 	if stdin ~= nil then
 		opts.stdin = stdin
@@ -913,7 +917,13 @@ function M.gsm_open_secrets()
 	notify("loading secrets…")
 	gcloud_json({ "secrets", "list", "--project=" .. M.state.project }, function(ok, data, err)
 		if not ok then
-			notify("secrets list failed: " .. err, vim.log.levels.ERROR)
+			notify("secrets list failed for '" .. M.state.project .. "' — pick another project.\n" .. err, vim.log.levels.ERROR)
+			-- Clear the bad project and reopen the picker so the user isn't dead-ended
+			-- (e.g. wrong project, or Secret Manager API disabled on that project).
+			M.state.project = nil
+			vim.schedule(function()
+				M.pick_project(M.gsm_open_secrets)
+			end)
 			return
 		end
 		local secrets = {}

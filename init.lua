@@ -2211,6 +2211,18 @@ vim.keymap.set("n", "<leader>m7", function() nav_harpoon(7) end, { desc = "Harpo
 vim.keymap.set("n", "<leader>m8", function() nav_harpoon(8) end, { desc = "Harpoon file 8" })
 vim.keymap.set("n", "<leader>m9", function() nav_harpoon(9) end, { desc = "Harpoon file 9" })
 
+-- A buffer referenced by an uppercase global mark (mA..mZ) must not be deleted,
+-- or jumping back to that mark later fails with E92: Buffer not found.
+local function buffer_has_global_mark(bufnr)
+	for i = string.byte("A"), string.byte("Z") do
+		local m = vim.api.nvim_get_mark(string.char(i), {})
+		if m and m[3] == bufnr then
+			return true
+		end
+	end
+	return false
+end
+
 -- When a real file is opened after using Oil, delete the buffer that was open before Oil.
 -- This prevents files from accumulating in bufferline when navigating via Oil.
 vim.api.nvim_create_autocmd("BufEnter", {
@@ -2221,11 +2233,13 @@ vim.api.nvim_create_autocmd("BufEnter", {
 		-- Only act when we land on a normal file buffer (not Oil, terminal, quickfix, etc.)
 		if vim.bo[cur].buftype ~= "" then return end
 		if cur == pre then vim.g._pre_oil_buf = nil; return end
-		-- Delete the pre-Oil buffer if it has no unsaved changes and isn't visible anywhere
+		-- Delete the pre-Oil buffer if it has no unsaved changes, isn't visible
+		-- anywhere, and isn't pinned by a global mark.
 		vim.g._pre_oil_buf = nil
 		if vim.api.nvim_buf_is_valid(pre)
 			and not vim.bo[pre].modified
 			and #vim.fn.win_findbuf(pre) == 0
+			and not buffer_has_global_mark(pre)
 		then
 			pcall(vim.api.nvim_buf_delete, pre, { force = false })
 		end
