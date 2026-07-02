@@ -117,6 +117,7 @@ require("lazy").setup({
 				{ "<leader>x",  group = "diagnostics (trouble)" },
 				{ "<leader>c",  group = "code" },
 				{ "<leader>k",  desc = "kubectl (kubernetes)" },
+				{ "<leader>kc", desc = "Flagger canaries (live)" },
 				{ "<leader>K",  desc = "GCP artifact registry" },
 				{ "<leader>G",  desc = "GCP secret manager" },
 			})
@@ -169,6 +170,7 @@ require("lazy").setup({
 					["<C-t>"] = "actions.select_tab",
 					["<C-p>"] = "actions.preview",
 					["<C-c>"] = "actions.close",
+					["q"] = "actions.close",
 				["<BS>"] = "actions.close",
 					["<C-l>"] = false,
 					["<C-r>"] = "actions.refresh",
@@ -259,6 +261,9 @@ require("lazy").setup({
 					"terraformls",  -- Terraform
 					"dockerls",     -- Dockerfile
 					"yamlls",       -- YAML
+					"bashls",       -- Shell scripts
+					"jsonls",       -- JSON
+					"helm_ls",      -- Helm charts
 				},
 			})
 		end,
@@ -267,6 +272,7 @@ require("lazy").setup({
 	-- LSP Configuration
 	{
 		"neovim/nvim-lspconfig",
+		dependencies = { "b0o/schemastore.nvim" },
 		config = function()
 			local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
@@ -350,7 +356,10 @@ require("lazy").setup({
 				capabilities = capabilities,
 				settings = {
 					yaml = {
-						schemaStore = { enable = true, url = "https://www.schemastore.org/api/json/catalog.json" },
+						-- Disable the built-in store; SchemaStore.nvim bundles Kubernetes,
+						-- GitHub Actions, docker-compose, kustomize, etc. and auto-detects them.
+						schemaStore = { enable = false, url = "" },
+						schemas = require("schemastore").yaml.schemas(),
 						validate = true,
 						complete = true,
 						hover = true,
@@ -374,8 +383,38 @@ require("lazy").setup({
 				capabilities = capabilities,
 			}
 
+			-- Shell scripts
+			vim.lsp.config.bashls = {
+				cmd = { "bash-language-server", "start" },
+				filetypes = { "sh", "bash" },
+				root_markers = { ".git" },
+				capabilities = capabilities,
+			}
+
+			-- JSON (schemas from SchemaStore: package.json, tsconfig, etc.)
+			vim.lsp.config.jsonls = {
+				cmd = { "vscode-json-language-server", "--stdio" },
+				filetypes = { "json", "jsonc" },
+				root_markers = { ".git" },
+				capabilities = capabilities,
+				settings = {
+					json = {
+						schemas = require("schemastore").json.schemas(),
+						validate = { enable = true },
+					},
+				},
+			}
+
+			-- Helm charts (needs vim-helm for the "helm" filetype to attach)
+			vim.lsp.config.helm_ls = {
+				cmd = { "helm_ls", "serve" },
+				filetypes = { "helm" },
+				root_markers = { "Chart.yaml", ".git" },
+				capabilities = capabilities,
+			}
+
 			-- Enable LSP servers
-			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls", "terraformls", "dockerls", "yamlls" })
+			vim.lsp.enable({ "ts_ls", "clangd", "jdtls", "intelephense", "html", "cssls", "lua_ls", "terraformls", "dockerls", "yamlls", "bashls", "jsonls", "helm_ls" })
 
 			-- LSP keybindings (replaced with LSP Saga enhanced versions)
 			vim.keymap.set("n", "gd", "<cmd>Lspsaga goto_definition<CR>", { desc = "Go to definition" })
@@ -1433,12 +1472,99 @@ require("lazy").setup({
 			require("kubectl").setup()
 		end,
 	},
+
+	-- nvim-lint: linting to complement conform.nvim (which only formats).
+	-- Requires the linter CLIs installed — see note after this config.
+	{
+		"mfussenegger/nvim-lint",
+		event = { "BufReadPre", "BufNewFile" },
+		config = function()
+			local lint = require("lint")
+			lint.linters_by_ft = {
+				yaml = { "yamllint" },
+				terraform = { "tflint" },
+				dockerfile = { "hadolint" },
+				sh = { "shellcheck" },
+				bash = { "shellcheck" },
+				markdown = { "markdownlint" },
+			}
+
+			local grp = vim.api.nvim_create_augroup("nvim_lint", { clear = true })
+			vim.api.nvim_create_autocmd({ "BufWritePost", "BufReadPost", "InsertLeave" }, {
+				group = grp,
+				callback = function()
+					require("lint").try_lint()
+				end,
+			})
+			-- actionlint only for GitHub Actions workflow files (yaml filetype)
+			vim.api.nvim_create_autocmd({ "BufWritePost", "BufReadPost" }, {
+				group = grp,
+				pattern = { "*/.github/workflows/*.yml", "*/.github/workflows/*.yaml" },
+				callback = function()
+					require("lint").try_lint("actionlint")
+				end,
+			})
+
+			vim.keymap.set("n", "<leader>cL", function()
+				require("lint").try_lint()
+			end, { desc = "Lint current file" })
+		end,
+	},
+
+	-- Treesitter context: pin the current function / block / yaml key at the top
+	{
+		"nvim-treesitter/nvim-treesitter-context",
+		dependencies = { "nvim-treesitter/nvim-treesitter" },
+		event = { "BufReadPre", "BufNewFile" },
+		config = function()
+			require("treesitter-context").setup({
+				max_lines = 3,
+				multiline_threshold = 1,
+			})
+		end,
+	},
+
+	-- todo-comments: highlight and list TODO / FIXME / HACK / NOTE
+	{
+		"folke/todo-comments.nvim",
+		dependencies = { "nvim-lua/plenary.nvim" },
+		event = { "BufReadPre", "BufNewFile" },
+		config = function()
+			local td = require("todo-comments")
+			td.setup()
+			vim.keymap.set("n", "]t", function() td.jump_next() end, { desc = "Next todo comment" })
+			vim.keymap.set("n", "[t", function() td.jump_prev() end, { desc = "Prev todo comment" })
+			vim.keymap.set("n", "<leader>xt", "<cmd>TodoTrouble<cr>", { desc = "Todos (Trouble)" })
+			vim.keymap.set("n", "<leader>xT", "<cmd>TodoTelescope<cr>", { desc = "Todos (Telescope)" })
+		end,
+	},
+
+	-- Helm chart filetype detection (required for helm_ls to attach).
+	-- Loaded eagerly so its ftdetect runs before the first chart file opens.
+	{
+		"towolf/vim-helm",
+		lazy = false,
+	},
 })
 
 -- gcp.nvim: local module — GCP Artifact Registry + Secret Manager browser
 require("gcp").setup()
 vim.keymap.set("n", "<leader>K", "<cmd>Gar<cr>", { desc = "GCP Artifact Registry browser" })
 vim.keymap.set("n", "<leader>G", "<cmd>Gsm<cr>", { desc = "GCP Secret Manager browser" })
+
+-- Flagger progressive delivery: live view of Canary CRDs (auto-refreshes,
+-- so WEIGHT/STATUS update in place as a canary gradually migrates).
+vim.keymap.set("n", "<leader>kc", "<cmd>Kubectl view canaries<cr>", { desc = "Flagger canaries (live)" })
+
+-- kubectl.nvim ships its quit action unmapped, so its views have no way out
+-- (BS only goes up a level). Map q to close the view and stop the background
+-- informer process, matching the q-to-quit convention used by the GCP views.
+vim.api.nvim_create_autocmd("FileType", {
+	pattern = "k8s_*",
+	callback = function(ev)
+		vim.keymap.set("n", "q", "<Plug>(kubectl.quit)", { buffer = ev.buf, nowait = true, silent = true, desc = "Close kubectl view" })
+	end,
+})
 
 -- Basic Neovim settings
 vim.opt.number = true
