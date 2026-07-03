@@ -1588,11 +1588,32 @@ require("lazy").setup({
 				markdown = { "markdownlint" },
 			}
 
+			-- Only run linters whose CLI is actually installed, so a missing tool
+			-- (e.g. markdownlint) doesn't throw "ENOENT" on every save.
+			local function runnable(names)
+				local out = {}
+				for _, name in ipairs(names) do
+					local linter = lint.linters[name]
+					local cmd = type(linter) == "table" and linter.cmd
+					if type(cmd) == "string" and vim.fn.executable(cmd) == 1 then
+						table.insert(out, name)
+					end
+				end
+				return out
+			end
+			local function lint_available(names)
+				names = names or lint.linters_by_ft[vim.bo.filetype] or {}
+				local ok = runnable(names)
+				if #ok > 0 then
+					lint.try_lint(ok)
+				end
+			end
+
 			local grp = vim.api.nvim_create_augroup("nvim_lint", { clear = true })
 			vim.api.nvim_create_autocmd({ "BufWritePost", "BufReadPost", "InsertLeave" }, {
 				group = grp,
 				callback = function()
-					require("lint").try_lint()
+					lint_available()
 				end,
 			})
 			-- actionlint only for GitHub Actions workflow files (yaml filetype)
@@ -1600,12 +1621,12 @@ require("lazy").setup({
 				group = grp,
 				pattern = { "*/.github/workflows/*.yml", "*/.github/workflows/*.yaml" },
 				callback = function()
-					require("lint").try_lint("actionlint")
+					lint_available({ "actionlint" })
 				end,
 			})
 
 			vim.keymap.set("n", "<leader>cL", function()
-				require("lint").try_lint()
+				lint_available()
 			end, { desc = "Lint current file" })
 		end,
 	},
