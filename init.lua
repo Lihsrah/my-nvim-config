@@ -26,6 +26,12 @@ if not vim.loop.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+-- Make nvim-treesitter's query handlers work on Neovim 0.12, which removed the
+-- `all = false` option they rely on. Must run before any plugin registers a
+-- predicate or directive. See lua/tscompat/init.lua.
+vim.opt.rtp:prepend(vim.fn.stdpath("config"))
+require("tscompat").setup()
+
 -- Configure lazy.nvim plugins
 require("lazy").setup({
 	-- Tokyodark colorscheme
@@ -1174,10 +1180,10 @@ require("lazy").setup({
 					enabled = true,
 					icon = "▋",
 				},
+				-- Owned by lua/mdtable instead, which wraps long cells inside
+				-- their column. Leaving both enabled double-renders the table.
 				pipe_table = {
-					enabled = true,
-					style = "full",
-					cell = "padded",
+					enabled = false,
 				},
 				callout = {
 					note = { raw = "[!NOTE]", rendered = "󰋽 Note", highlight = "RenderMarkdownInfo" },
@@ -2237,6 +2243,14 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
+-- Markdown tables with long cells wrapped inside their column.
+-- 'wrap' can't do this: a table row is one logical line, so it continues at
+-- screen column 0 and the alignment collapses. See lua/mdtable/init.lua.
+require("mdtable").setup({
+	min_width = 6,
+	reveal = "table", -- show raw source while the cursor is in a table
+})
+
 -- Markdown keybindings
 vim.api.nvim_create_autocmd("FileType", {
 	pattern = "markdown",
@@ -2258,6 +2272,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 		-- Table mode toggle
 		vim.keymap.set("n", "<leader>tm", "<cmd>TableModeToggle<CR>", { buffer = true, desc = "Toggle Table Mode" })
+		vim.keymap.set("n", "<leader>tw", "<cmd>MDTableToggle<CR>", { buffer = true, desc = "Toggle wrapped tables" })
 
 		-- Generate TOC
 		vim.keymap.set("n", "<leader>toc", "<cmd>GenTocGFM<CR>", { buffer = true, desc = "Generate TOC (GitHub)" })
