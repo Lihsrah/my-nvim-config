@@ -1180,10 +1180,12 @@ require("lazy").setup({
 					enabled = true,
 					icon = "▋",
 				},
+				-- Owned by lua/mdtable under 'nowrap'. Under 'wrap' nobody
+				-- draws them: render-markdown's borders are emitted per source
+				-- line, so an over-wide row gets split mid-border into noise.
+				-- Plain wrapped source is worse-looking but never mangled.
 				pipe_table = {
-					enabled = true,
-					style = "full",
-					cell = "padded",
+					enabled = false,
 				},
 				callout = {
 					note = { raw = "[!NOTE]", rendered = "󰋽 Note", highlight = "RenderMarkdownInfo" },
@@ -2243,43 +2245,26 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
--- Hand markdown tables between two renderers based on 'wrap'.
+-- Markdown table rendering, and prose wrapping, keyed off 'wrap'.
 --
---   nowrap  render-markdown draws the table. A row wider than the window is
---           simply cut off at the right edge, alignment intact, and cursor
---           movement is completely normal.
+--   nowrap  lua/mdtable draws the table, reflowed to the window with each cell
+--           word wrapped inside its own column. It renders one source row at a
+--           time, so every table row keeps its own screen line and scrolling
+--           and cursor movement stay normal. That requires 'nowrap', where a
+--           line is always exactly one screen row: under 'wrap' a concealed
+--           line still occupies ceil(width / window) rows -- conceal does not
+--           shrink it -- so the drawn rows would be separated by blank ones.
 --
---   wrap    render-markdown draws borders per source line, so a row wider than
---           the window gets split mid-border and the table turns to noise.
---           Hand over to lua/mdtable, which reflows the table to the window and
---           word wraps each cell inside its own column. The cost is that it
---           hides the source with conceal_lines, which have zero screen height,
---           so the cursor moves through a table in jumps -- only paid while
---           wrap is on.
---
--- Exactly one of the two draws tables at any time; leaving both on
--- double-renders. Prose gets word-boundary wrapping under wrap either way.
---
--- render-markdown's config is global, so with markdown windows open at
--- different 'wrap' settings the most recent one wins.
-local md_tables_drawn = true
+--   wrap    nothing draws tables; you get plain markdown source, wrapped at
+--           word boundaries with a marked continuation. render-markdown's
+--           pipe_table is off for good (see its config above) because its
+--           borders are emitted per source line and 'wrap' splits them
+--           mid-border into noise.
 local function md_sync_wrap()
 	if vim.bo.filetype ~= "markdown" then
 		return
 	end
 	local wrapped = vim.wo.wrap
-
-	if wrapped == md_tables_drawn then
-		md_tables_drawn = not wrapped
-		require("render-markdown").setup({
-			pipe_table = wrapped and { enabled = false }
-				or { enabled = true, style = "full", cell = "padded" },
-		})
-		-- setup() only re-resolves config; re-enabling needs one of the events
-		-- render-markdown already refreshes on, or the table stays hidden until
-		-- the next cursor move.
-		vim.api.nvim_exec_autocmds("CursorMoved", { buffer = 0 })
-	end
 
 	vim.opt_local.linebreak = wrapped
 	vim.opt_local.breakindent = wrapped
@@ -2291,7 +2276,10 @@ end
 
 require("mdtable").setup({
 	min_width = 6,
-	reveal = "table", -- show raw source while the cursor is in a table
+	-- Keep the table drawn as the cursor moves through it; un-rendering the
+	-- whole thing on entry flashes badly while scrolling. Insert mode still
+	-- drops the entire buffer back to raw source for editing.
+	reveal = "none",
 })
 
 vim.api.nvim_create_autocmd("OptionSet", {
