@@ -316,20 +316,11 @@ local function render_table(buf, tbl, lines, avail, cursor)
 	local overhead = 1 + ncols * (config.padding * 2 + 1)
 	local widths = layout(natural, math.max(ncols, avail - overhead), config.min_width)
 
-	-- Draw per source row, so each table row keeps its own screen line and the
-	-- cursor and scrolling behave normally. This relies on 'nowrap', where a
-	-- line is always exactly one screen row: character-level conceal empties
-	-- the text without collapsing the line, and the first display row is
-	-- painted over it. (A line-level `conceal_lines` would give zero height but
-	-- also suppress that line's own virt_lines, forcing the whole table onto a
-	-- single anchor -- which is what made it scroll as one block.)
-	for r = tbl.start, tbl.stop do
-		local idx = r - tbl.start + 1
-		local row0 = r - 1 -- extmarks are 0-indexed
-
-		local display = {}
+	-- The whole table, as finished virtual lines.
+	local display = { border_line(widths, config.border.tl, config.border.tm, config.border.tr) }
+	for idx = 1, #raw do
 		if idx == 2 then
-			display[1] = border_line(widths, config.border.ml, config.border.mm, config.border.mr)
+			display[#display + 1] = border_line(widths, config.border.ml, config.border.mm, config.border.mr)
 		else
 			local hl = idx == 1 and config.hl.head or config.hl.row
 			local cell_lines, height = {}, 1
@@ -338,40 +329,40 @@ local function render_table(buf, tbl, lines, avail, cursor)
 				height = math.max(height, #cell_lines[c])
 			end
 			for k = 1, height do
-				display[k] = content_line(cell_lines, k, widths, aligns, hl)
+				display[#display + 1] = content_line(cell_lines, k, widths, aligns, hl)
 			end
 		end
-
-		vim.api.nvim_buf_set_extmark(buf, ns, row0, 0, {
-			end_row = row0,
-			end_col = #lines[r],
-			conceal = "",
-		})
-
-		if idx == 1 then
-			vim.api.nvim_buf_set_extmark(buf, ns, row0, 0, {
-				virt_lines = { border_line(widths, config.border.tl, config.border.tm, config.border.tr) },
-				virt_lines_above = true,
-			})
-		end
-
-		vim.api.nvim_buf_set_extmark(buf, ns, row0, 0, {
-			virt_text = display[1],
-			virt_text_pos = "overlay",
-			virt_text_win_col = 0,
-		})
-
-		local below = {}
-		for k = 2, #display do
-			below[#below + 1] = display[k]
-		end
-		if idx == #raw then
-			below[#below + 1] = border_line(widths, config.border.bl, config.border.bm, config.border.br)
-		end
-		if #below > 0 then
-			vim.api.nvim_buf_set_extmark(buf, ns, row0, 0, { virt_lines = below })
-		end
 	end
+	display[#display + 1] = border_line(widths, config.border.bl, config.border.bm, config.border.br)
+
+	-- Hiding the source needs `conceal_lines`: character-level conceal leaves
+	-- the line's *wrapped height* intact, which under 'wrap' shows up as blank
+	-- rows between the table rows. But `conceal_lines` also suppresses that
+	-- line's own virt_lines, so the drawing has to hang off a line that stays
+	-- visible -- the one before the table, or the one after it.
+	local anchor, above
+	local is_row = function(n)
+		return lines[n] ~= nil and lines[n]:match("^%s*|") ~= nil
+	end
+	if tbl.start > 1 and not is_row(tbl.start - 1) then
+		anchor, above = tbl.start - 2, false
+	elseif tbl.stop < #lines and not is_row(tbl.stop + 1) then
+		anchor, above = tbl.stop, true
+	end
+
+	if not anchor then
+		-- Table fills the buffer with no neighbouring line to hang it on.
+		-- Leave the source visible rather than blanking it out.
+		return
+	end
+
+	for r = tbl.start, tbl.stop do
+		vim.api.nvim_buf_set_extmark(buf, ns, r - 1, 0, { conceal_lines = "" })
+	end
+	vim.api.nvim_buf_set_extmark(buf, ns, anchor, 0, {
+		virt_lines = display,
+		virt_lines_above = above,
+	})
 end
 
 function M.render(buf)
@@ -388,12 +379,11 @@ function M.render(buf)
 	if not config.enabled or vim.bo[buf].filetype ~= "markdown" then
 		return
 	end
-	-- Requires 'nowrap'. Rendering per source row keeps one screen line per
-	-- table row, which is what makes scrolling normal, and that only holds when
-	-- a line cannot occupy more than one screen row. Under 'wrap' a concealed
-	-- line still takes ceil(width / window) rows -- conceal does not shrink it
-	-- -- so the drawn rows would be separated by blank ones.
-	if vim.wo.wrap then
+	-- Only take over while 'wrap' is on. With 'nowrap' there is nothing to fix
+	-- -- render-markdown draws the table fine and scrolling stays normal --
+	-- and this renderer's cost (concealed lines have zero screen height, so the
+	-- cursor moves through a table in jumps) is not worth paying.
+	if not vim.wo.wrap then
 		return
 	end
 	-- Match render-markdown's render_modes: normal and command only, so the
