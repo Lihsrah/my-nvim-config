@@ -2117,6 +2117,54 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
+-- Keep markdown readable under 'wrap'.
+--
+-- render-markdown draws table borders per source line. A table row wider than
+-- the window is still one logical line, so 'wrap' splits it mid-border and the
+-- drawn table turns to noise. There is no way to wrap a cell inside its column
+-- (a row is one line, and Neovim has no notion of a cell), so instead drop back
+-- to plain markdown tables whenever wrap is on -- readable, never mangled --
+-- and restore the drawn ones when it is off. Prose gets word-boundary wrapping
+-- with a marked continuation at the same time.
+--
+-- render-markdown's config is global, so with markdown windows open at
+-- different 'wrap' settings the most recent one wins.
+local md_tables_drawn = true
+local function md_sync_wrap()
+	if vim.bo.filetype ~= "markdown" then
+		return
+	end
+	local wrapped = vim.wo.wrap
+
+	if wrapped == md_tables_drawn then
+		md_tables_drawn = not wrapped
+		require("render-markdown").setup({
+			pipe_table = wrapped and { enabled = false }
+				or { enabled = true, style = "full", cell = "padded" },
+		})
+		-- setup() only re-resolves config; re-enabling needs one of the events
+		-- render-markdown already refreshes on, or the table stays hidden until
+		-- the next cursor move.
+		vim.api.nvim_exec_autocmds("CursorMoved", { buffer = 0 })
+	end
+
+	vim.opt_local.linebreak = wrapped
+	vim.opt_local.breakindent = wrapped
+	vim.opt_local.breakindentopt = wrapped and "shift:2" or ""
+	vim.opt_local.showbreak = wrapped and "↳ " or ""
+end
+
+vim.api.nvim_create_autocmd("OptionSet", {
+	pattern = "wrap",
+	callback = md_sync_wrap,
+})
+vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter" }, {
+	pattern = "markdown",
+	callback = function()
+		vim.schedule(md_sync_wrap)
+	end,
+})
+
 -- Markdown keybindings
 vim.api.nvim_create_autocmd("FileType", {
 	pattern = "markdown",
