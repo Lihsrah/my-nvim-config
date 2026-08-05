@@ -2281,17 +2281,23 @@ local function md_sync_wrap()
 		vim.api.nvim_exec_autocmds("CursorMoved", { buffer = 0 })
 	end
 
-	vim.opt_local.linebreak = wrapped
-	vim.opt_local.breakindent = wrapped
-	vim.opt_local.breakindentopt = wrapped and "shift:2" or ""
-	vim.opt_local.showbreak = wrapped and "↳ " or ""
+	-- mdtable paints each wrapped screen row via an overlay anchored at the
+	-- byte that row starts on, which assumes plain fixed-width wrapping. Word
+	-- wrapping and continuation indents move those boundaries, so keep them off.
+	vim.opt_local.linebreak = false
+	vim.opt_local.breakindent = false
+	vim.opt_local.breakindentopt = ""
+	vim.opt_local.showbreak = ""
 
 	require("mdtable").render()
 end
 
 require("mdtable").setup({
 	min_width = 6,
-	reveal = "table", -- show raw source while the cursor is in a table
+	-- Keep the table drawn as the cursor passes through it; un-rendering the
+	-- whole table on entry flashes badly while scrolling. Insert mode still
+	-- drops the buffer back to raw source for editing.
+	reveal = "none",
 })
 
 vim.api.nvim_create_autocmd("OptionSet", {

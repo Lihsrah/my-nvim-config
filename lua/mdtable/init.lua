@@ -335,34 +335,76 @@ local function render_table(buf, tbl, lines, avail, cursor)
 	end
 	display[#display + 1] = border_line(widths, config.border.bl, config.border.bm, config.border.br)
 
-	-- Hiding the source needs `conceal_lines`: character-level conceal leaves
-	-- the line's *wrapped height* intact, which under 'wrap' shows up as blank
-	-- rows between the table rows. But `conceal_lines` also suppresses that
-	-- line's own virt_lines, so the drawing has to hang off a line that stays
-	-- visible -- the one before the table, or the one after it.
-	local anchor, above
-	local is_row = function(n)
-		return lines[n] ~= nil and lines[n]:match("^%s*|") ~= nil
-	end
-	if tbl.start > 1 and not is_row(tbl.start - 1) then
-		anchor, above = tbl.start - 2, false
-	elseif tbl.stop < #lines and not is_row(tbl.stop + 1) then
-		anchor, above = tbl.stop, true
-	end
-
-	if not anchor then
-		-- Table fills the buffer with no neighbouring line to hang it on.
-		-- Leave the source visible rather than blanking it out.
-		return
-	end
-
+	-- Paint into the screen rows the source already occupies.
+	--
+	-- Under 'wrap' a table row wider than the window is spread over
+	-- ceil(width / avail) screen rows, and nothing shrinks that: conceal leaves
+	-- the height untouched at any 'conceallevel', and `conceal_lines` zeroes it
+	-- but also suppresses that line's virt_lines in both directions, which is
+	-- what previously forced the whole table onto one anchor and made it scroll
+	-- as a single block.
+	--
+	-- So don't fight the layout: an overlay anchored at the byte starting a
+	-- given wrapped screen row paints exactly that row. Collect every screen row
+	-- of every source line as an ordered slot, then pour the drawn table into
+	-- them. Each source line keeps its own screen rows, so scrolling and cursor
+	-- movement stay per-line.
+	local slots = {}
 	for r = tbl.start, tbl.stop do
-		vim.api.nvim_buf_set_extmark(buf, ns, r - 1, 0, { conceal_lines = "" })
+		local line = lines[r]
+		local lw = math.max(1, dw(line))
+		local rows = math.max(1, math.ceil(lw / avail))
+		for k = 1, rows do
+			-- Byte index at which screen row k of this line starts.
+			local target, w, b = (k - 1) * avail, 0, 0
+			for ch in line:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+				if w >= target then
+					break
+				end
+				w = w + dw(ch)
+				b = b + #ch
+			end
+			slots[#slots + 1] = { row = r - 1, col = math.min(b, #line) }
+		end
 	end
-	vim.api.nvim_buf_set_extmark(buf, ns, anchor, 0, {
-		virt_lines = display,
-		virt_lines_above = above,
-	})
+
+	-- Spare slots would show through as gaps, so grow the table to fill them
+	-- with empty cell rows kept above the closing border.
+	local empty = {}
+	for c = 1, ncols do
+		empty[c] = { "" }
+	end
+	while #display < #slots do
+		table.insert(display, #display, content_line(empty, 1, widths, aligns, config.hl.row))
+	end
+
+	for i, slot in ipairs(slots) do
+		if display[i] then
+			-- Pad to the full text width so no source text shows past the table.
+			local chunks = vim.deepcopy(display[i])
+			local used = 0
+			for _, chunk in ipairs(chunks) do
+				used = used + dw(chunk[1])
+			end
+			if used < avail then
+				chunks[#chunks + 1] = { string.rep(" ", avail - used), "Normal" }
+			end
+			vim.api.nvim_buf_set_extmark(buf, ns, slot.row, slot.col, {
+				virt_text = chunks,
+				virt_text_pos = "overlay",
+			})
+		end
+	end
+
+	-- Anything that did not fit hangs below the final source line, which is not
+	-- concealed and so still carries its own virt_lines.
+	local below = {}
+	for i = #slots + 1, #display do
+		below[#below + 1] = display[i]
+	end
+	if #below > 0 then
+		vim.api.nvim_buf_set_extmark(buf, ns, tbl.stop - 1, 0, { virt_lines = below })
+	end
 end
 
 function M.render(buf)
