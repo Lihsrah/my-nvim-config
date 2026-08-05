@@ -2243,15 +2243,22 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
--- Keep markdown readable under 'wrap'.
+-- Hand markdown tables between two renderers based on 'wrap'.
 --
--- render-markdown draws table borders per source line. A table row wider than
--- the window is still one logical line, so 'wrap' splits it mid-border and the
--- drawn table turns to noise. There is no way to wrap a cell inside its column
--- (a row is one line, and Neovim has no notion of a cell), so instead drop back
--- to plain markdown tables whenever wrap is on -- readable, never mangled --
--- and restore the drawn ones when it is off. Prose gets word-boundary wrapping
--- with a marked continuation at the same time.
+--   nowrap  render-markdown draws the table. A row wider than the window is
+--           simply cut off at the right edge, alignment intact, and cursor
+--           movement is completely normal.
+--
+--   wrap    render-markdown draws borders per source line, so a row wider than
+--           the window gets split mid-border and the table turns to noise.
+--           Hand over to lua/mdtable, which reflows the table to the window and
+--           word wraps each cell inside its own column. The cost is that it
+--           hides the source with conceal_lines, which have zero screen height,
+--           so the cursor moves through a table in jumps -- only paid while
+--           wrap is on.
+--
+-- Exactly one of the two draws tables at any time; leaving both on
+-- double-renders. Prose gets word-boundary wrapping under wrap either way.
 --
 -- render-markdown's config is global, so with markdown windows open at
 -- different 'wrap' settings the most recent one wins.
@@ -2278,7 +2285,14 @@ local function md_sync_wrap()
 	vim.opt_local.breakindent = wrapped
 	vim.opt_local.breakindentopt = wrapped and "shift:2" or ""
 	vim.opt_local.showbreak = wrapped and "↳ " or ""
+
+	require("mdtable").render()
 end
+
+require("mdtable").setup({
+	min_width = 6,
+	reveal = "table", -- show raw source while the cursor is in a table
+})
 
 vim.api.nvim_create_autocmd("OptionSet", {
 	pattern = "wrap",
@@ -2312,6 +2326,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 		-- Table mode toggle
 		vim.keymap.set("n", "<leader>tm", "<cmd>TableModeToggle<CR>", { buffer = true, desc = "Toggle Table Mode" })
+		vim.keymap.set("n", "<leader>tw", "<cmd>MDTableToggle<CR>", { buffer = true, desc = "Toggle wrapped tables" })
 
 		-- Generate TOC
 		vim.keymap.set("n", "<leader>toc", "<cmd>GenTocGFM<CR>", { buffer = true, desc = "Generate TOC (GitHub)" })
